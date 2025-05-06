@@ -65,5 +65,22 @@ app.delete('/delete', async (req, res) => {
   }
 });
 
+// Upload image to Cloudinary
+app.post('/api/upload', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file || !req.file.path) {
+      return res.status(400).json({ error: 'No image uploaded' });
+    }
+
+    res.json({
+      url: req.file.path,              // secure_url
+      fileName: req.file.filename      // public_id
+    });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Image upload failed' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
