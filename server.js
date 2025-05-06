@@ -73,8 +73,8 @@ app.post('/api/upload', upload.single('image'), async (req, res) => {
     }
 
     res.json({
-      url: req.file.path,              // secure_url
-      fileName: req.file.filename      // public_id
+      url: req.file.secure_url,        // secure_url from Cloudinary
+      fileName: req.file.public_id     // public_id from Cloudinary
     });
   } catch (error) {
     console.error('Upload error:', error);
