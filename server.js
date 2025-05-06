@@ -21,8 +21,12 @@ app.get('/api/gallery', async (req, res) => {
       .max_results(30)
       .execute();
 
-    const urls = result.resources.map((file) => file.secure_url);
-    res.json(urls);
+    const images = result.resources.map((file) => ({
+      url: file.secure_url,
+      fileName: file.public_id
+    }));
+
+    res.json(images);
   } catch (err) {
     console.error('Gallery fetch failed', err);
     res.status(500).json({ error: 'Failed to fetch gallery' });
