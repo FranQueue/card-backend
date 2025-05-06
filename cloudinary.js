@@ -4,7 +4,7 @@ const multer = require('multer');
 
 // Configure Cloudinary with your credentials
 cloudinary.config({
-  cloud_name: 'franqueue',
+  cloud_name: 'dbb1fjhhf',
   api_key: '755166464866419',
   api_secret: 'ZzDEuJ9-s2gobRpjh6WayOmLHh8',
 });
