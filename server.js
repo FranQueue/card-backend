@@ -82,11 +82,48 @@ app.get('/api/cards/:id', async (req, res) => {
   }
 });
 
-// Update an existing card (metadata only)
-app.put('/api/cards/:id', async (req, res) => {
+// Update an existing card (metadata + image, if provided)
+app.put('/api/cards/:id', upload.single('image'), async (req, res) => {
   try {
-    const updated = await Card.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
+    const card = await Card.findById(req.params.id);
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+
+    // Handle image upload if a new image is provided
+    let imageUrl = card.imageUrl;
+    let fileName = card.fileName;
+
+    if (req.file) {
+      // Delete old image from Cloudinary
+      await cloudinary.uploader.destroy(fileName);
+
+      // Upload the new image to Cloudinary
+      const result = await cloudinary.uploader.upload(req.file.path);
+      imageUrl = result.secure_url;
+      fileName = result.public_id;
+    }
+
+    // Update card with the new data
+    const updatedCard = await Card.findByIdAndUpdate(
+      req.params.id,
+      {
+        title: req.body.title,
+        subtitle: req.body.subtitle,
+        description: req.body.description,
+        hpCost: req.body.hpCost,
+        spCost: req.body.spCost,
+        offsetX: req.body.offsetX,
+        offsetY: req.body.offsetY,
+        titleFontSize: req.body.titleFontSize,
+        titlePositionY: req.body.titlePositionY,
+        cardType: req.body.cardType,
+        imageScale: req.body.imageScale,
+        imageUrl: imageUrl,
+        fileName: fileName,
+      },
+      { new: true }
+    );
+
+    res.json(updatedCard);
   } catch (err) {
     console.error('❌ Update error:', err);
     res.status(500).json({ error: 'Update failed' });
