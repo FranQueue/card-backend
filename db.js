@@ -1,16 +1,21 @@
-// db.js
 const { MongoClient } = require('mongodb');
-require('dotenv').config();
+const uri = process.env.MONGODB_URI;
 
-const uri = process.env.MONGO_URI;
-const client = new MongoClient(uri);
-const dbName = 'cardgallery';
+let client;
+let db;
 
 async function connectDB() {
-  if (!client.isConnected && !client.topology?.isConnected()) {
-    await client.connect();
-  }
-  return client.db(dbName);
+  if (db) return db;
+
+  client = new MongoClient(uri, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  });
+
+  await client.connect();
+  db = client.db(); // This will use the database name from the URI
+  console.log('✅ MongoDB connected');
+  return db;
 }
 
 module.exports = connectDB;
