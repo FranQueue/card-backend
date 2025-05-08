@@ -12,10 +12,10 @@ cloudinary.config({
 // Set up Cloudinary storage for multer
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
-  params: {
-    folder: 'card-gallery',       // This will be the folder where images are stored on Cloudinary
-    allowed_formats: ['png', 'jpg', 'jpeg'],  // Only allow these formats
-  },
+  params: async (req, file) => ({
+    folder: 'card-gallery',
+    format: 'png', // 🔥 This line forces PNG format
+  }),
 });
 
 // Multer setup with Cloudinary storage
