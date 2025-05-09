@@ -15,10 +15,14 @@ const storage = new CloudinaryStorage({
   params: async (req, file) => ({
     folder: 'card-gallery',  // Folder where images will be uploaded
     public_id: `${file.fieldname}-${Date.now()}`, // Unique public ID based on field name and timestamp
+    transformation: [
+      { width: 500, height: 500, crop: 'limit' }, // Optional transformation (resize)
+    ],
   }),
 });
 
 // Multer setup with Cloudinary storage
 const upload = multer({ storage });
 
+// Export the upload middleware and cloudinary instance
 module.exports = { upload, cloudinary };
