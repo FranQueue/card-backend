@@ -2,19 +2,19 @@ const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 
-// Configure Cloudinary with your credentials (ensure .env is loaded correctly)
+// Configure Cloudinary with your credentials from environment variables
 cloudinary.config({
-  cloud_name: dbb1fjhhf,
-  api_key: 755166464866419,
-  api_secret: ZzDEuJ9-s2gobRpjh6WayOmLHh8,
+  cloud_name: process.env.CLOUD_NAME,  // Load from .env file
+  api_key: process.env.API_KEY,        // Load from .env file
+  api_secret: process.env.API_SECRET,  // Load from .env file
 });
 
 // Set up Cloudinary storage for multer
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => ({
-    folder: 'card-gallery', // Folder where images will be uploaded
-    public_id: `${file.fieldname}-${Date.now()}`, // Unique public ID based on the field name and timestamp
+    folder: 'card-gallery',  // Folder where images will be uploaded
+    public_id: `${file.fieldname}-${Date.now()}`, // Unique public ID based on field name and timestamp
   }),
 });
 
