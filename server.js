@@ -1,5 +1,3 @@
-require('dotenv').config();
-
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -44,18 +42,17 @@ app.post('/api/upload', multiUpload, async (req, res) => {
     const artFile = req.files.rawImage[0]; // User-uploaded artwork
     const cardFile = req.files.cardImage ? req.files.cardImage[0] : null; // Optional: If card render exists
 
-    // Upload the artwork image to Cloudinary
-    const uploadedArt = await cloudinary.uploader.upload(artFile.path, {
-      folder: 'card-images', // Optional: specify a folder for Cloudinary uploads
-    });
+    // Art file is already uploaded by Multer-Cloudinary, get the Cloudinary URL and public_id
+    const uploadedArt = artFile ? {
+      secure_url: artFile.secure_url,
+      public_id: artFile.public_id
+    } : null;
 
-    // Upload the card image to Cloudinary if it exists
-    let uploadedCard = null;
-    if (cardFile) {
-      uploadedCard = await cloudinary.uploader.upload(cardFile.path, {
-        folder: 'card-images',
-      });
-    }
+    // Card file is also uploaded by Multer-Cloudinary (if it exists)
+    const uploadedCard = cardFile ? {
+      secure_url: cardFile.secure_url,
+      public_id: cardFile.public_id
+    } : null;
 
     // Create a new card with Cloudinary URLs
     const card = new Card({
@@ -72,8 +69,8 @@ app.post('/api/upload', multiUpload, async (req, res) => {
       imageScale: req.body.imageScale,
 
       // Save Cloudinary URLs and public IDs
-      artUrl: uploadedArt.secure_url,
-      artFileName: uploadedArt.public_id,
+      artUrl: uploadedArt?.secure_url,
+      artFileName: uploadedArt?.public_id,
 
       cardUrl: uploadedCard?.secure_url, // Optional: If card render exists
       cardFileName: uploadedCard?.public_id,
@@ -126,27 +123,21 @@ app.put('/api/cards/:id', multiUpload, async (req, res) => {
       await cloudinary.uploader.destroy(card.artFileName);
       
       const artFile = req.files.rawImage[0];
-      // Upload new artwork image to Cloudinary
-      const uploadedArt = await cloudinary.uploader.upload(artFile.path, {
-        folder: 'card-images',
-      });
-      imageUrl = uploadedArt.secure_url;
-      fileName = uploadedArt.public_id;
+      // Art file is already uploaded by Multer-Cloudinary
+      imageUrl = artFile.secure_url;
+      fileName = artFile.public_id;
     }
     
     if (req.files.cardImage) {
-      // Delete old card image if it exists in Cloudinary
+      // Delete old card image from Cloudinary
       if (card.cardFileName) {
         await cloudinary.uploader.destroy(card.cardFileName);
       }
       
       const cardFile = req.files.cardImage[0];
-      // Upload new card image to Cloudinary
-      const uploadedCard = await cloudinary.uploader.upload(cardFile.path, {
-        folder: 'card-images',
-      });
-      cardUrl = uploadedCard.secure_url;
-      cardFileName = uploadedCard.public_id;
+      // Card file is already uploaded by Multer-Cloudinary
+      cardUrl = cardFile.secure_url;
+      cardFileName = cardFile.public_id;
     }
 
     // Update metadata regardless of whether there's an image

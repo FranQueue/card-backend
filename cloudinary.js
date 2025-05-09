@@ -4,17 +4,18 @@ const multer = require('multer');
 
 // Configure Cloudinary with your credentials
 cloudinary.config({
-  cloud_name: 'dbb1fjhhf',
-  api_key: '755166464866419',
-  api_secret: 'ZzDEuJ9-s2gobRpjh6WayOmLHh8',
+  cloud_name: process.env.CLOUD_NAME, // it's better to keep credentials in environment variables
+  api_key: process.env.API_KEY,
+  api_secret: process.env.API_SECRET,
 });
 
 // Set up Cloudinary storage for multer
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => ({
-    folder: 'card-gallery',
-    format: 'png', // 🔥 This line forces PNG format
+    folder: 'card-gallery', // Folder where images will be uploaded
+    format: 'png', // Specify the image format, adjust as necessary
+    public_id: `${file.fieldname}-${Date.now()}`, // Optionally you can modify the public ID
   }),
 });
 
