@@ -1,10 +1,5 @@
 require('dotenv').config();
 
-const multiUpload = upload.fields([
-  { name: 'rawImage', maxCount: 1 },
-  { name: 'cardImage', maxCount: 1 }
-]);
-
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -14,6 +9,11 @@ const Card = require('./models/Card');
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const multiUpload = upload.fields([
+  { name: 'rawImage', maxCount: 1 },
+  { name: 'cardImage', maxCount: 1 }
+]);
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
