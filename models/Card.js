@@ -12,8 +12,15 @@ const cardSchema = new mongoose.Schema({
   titlePositionY: Number,
   cardType: String,
   imageScale: Number,
-  imageUrl: String,
-  fileName: String,
+
+  // Artwork image (uploaded by user)
+  artUrl: { type: String, required: true },
+  artFileName: { type: String, required: true },
+
+  // Card render image (optional)
+  cardUrl: String,
+  cardFileName: String,
+
   createdAt: { type: Date, default: Date.now }
 });
 
