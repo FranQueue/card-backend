@@ -43,6 +43,21 @@ app.post('/api/upload', multiUpload, async (req, res) => {
   
     const artFile = req.files.rawImage[0]; // User-uploaded artwork
     const cardFile = req.files.cardImage ? req.files.cardImage[0] : null; // Optional: If card render exists
+
+    // Upload the artwork image to Cloudinary
+    const uploadedArt = await cloudinary.uploader.upload(artFile.path, {
+      folder: 'card-images', // Optional: specify a folder for Cloudinary uploads
+    });
+
+    // Upload the card image to Cloudinary if it exists
+    let uploadedCard = null;
+    if (cardFile) {
+      uploadedCard = await cloudinary.uploader.upload(cardFile.path, {
+        folder: 'card-images',
+      });
+    }
+
+    // Create a new card with Cloudinary URLs
     const card = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -55,13 +70,13 @@ app.post('/api/upload', multiUpload, async (req, res) => {
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
-  
-      // Save URLs and public IDs for both images
-      artUrl: artFile.secure_url,
-      artFileName: artFile.public_id,
-  
-      cardUrl: cardFile?.secure_url, // Optional: If card render exists
-      cardFileName: cardFile?.public_id,
+
+      // Save Cloudinary URLs and public IDs
+      artUrl: uploadedArt.secure_url,
+      artFileName: uploadedArt.public_id,
+
+      cardUrl: uploadedCard?.secure_url, // Optional: If card render exists
+      cardFileName: uploadedCard?.public_id,
     });
   
     await card.save();
@@ -101,25 +116,37 @@ app.put('/api/cards/:id', multiUpload, async (req, res) => {
     const card = await Card.findById(req.params.id);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    let imageUrl = card.imageUrl;
-    let fileName = card.fileName;
+    let imageUrl = card.artUrl;
+    let fileName = card.artFileName;
+    let cardUrl = card.cardUrl;
+    let cardFileName = card.cardFileName;
 
     if (req.files.rawImage) {
-      // Delete old artwork image
+      // Delete old artwork image from Cloudinary
       await cloudinary.uploader.destroy(card.artFileName);
+      
       const artFile = req.files.rawImage[0];
-      imageUrl = artFile.secure_url;
-      fileName = artFile.public_id;
+      // Upload new artwork image to Cloudinary
+      const uploadedArt = await cloudinary.uploader.upload(artFile.path, {
+        folder: 'card-images',
+      });
+      imageUrl = uploadedArt.secure_url;
+      fileName = uploadedArt.public_id;
     }
     
     if (req.files.cardImage) {
-      // Delete old card image if it exists
+      // Delete old card image if it exists in Cloudinary
       if (card.cardFileName) {
         await cloudinary.uploader.destroy(card.cardFileName);
       }
+      
       const cardFile = req.files.cardImage[0];
-      cardUrl = cardFile.secure_url;
-      cardFileName = cardFile.public_id;
+      // Upload new card image to Cloudinary
+      const uploadedCard = await cloudinary.uploader.upload(cardFile.path, {
+        folder: 'card-images',
+      });
+      cardUrl = uploadedCard.secure_url;
+      cardFileName = uploadedCard.public_id;
     }
 
     // Update metadata regardless of whether there's an image
@@ -137,8 +164,10 @@ app.put('/api/cards/:id', multiUpload, async (req, res) => {
         titlePositionY: req.body.titlePositionY,
         cardType: req.body.cardType,
         imageScale: req.body.imageScale,
-        imageUrl,
-        fileName,
+        artUrl: imageUrl,
+        artFileName: fileName,
+        cardUrl,
+        cardFileName,
       },
       { new: true }
     );
@@ -156,10 +185,12 @@ app.delete('/api/delete/:id', async (req, res) => {
     const card = await Card.findById(req.params.id);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
+    // Delete artwork image from Cloudinary
     await cloudinary.uploader.destroy(card.artFileName);
-if (card.cardFileName) {
-  await cloudinary.uploader.destroy(card.cardFileName);
-}
+    if (card.cardFileName) {
+      await cloudinary.uploader.destroy(card.cardFileName);
+    }
+    // Delete the card document from MongoDB
     await card.deleteOne();
 
     res.json({ success: true });
