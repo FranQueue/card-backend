@@ -1,6 +1,6 @@
 const express = require('express');
 const { upload, cloudinary } = require('../cloudinary'); // assuming you export from cloudinary.js
-const Card = require('../Card'); // adjust path if needed
+const Card = require('../models/Card'); // adjust path if needed
 
 const router = express.Router();
 
