@@ -70,7 +70,7 @@ app.post('/api/upload', upload.single('cardImage'), async (req, res) => {
       bufferStream.pipe(uploadStream);
     });
 
-    // Save card data to MongoDB
+    // Save card data to MongoDB - Added default null values for art fields
     const newCard = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -84,19 +84,28 @@ app.post('/api/upload', upload.single('cardImage'), async (req, res) => {
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
       imageUrl: result.secure_url,
-      fileName: result.public_id
+      fileName: result.public_id,
+      artUrl: null,  // Explicitly set to null
+      artFileName: null  // Explicitly set to null
     });
 
     await newCard.save();
-
     res.status(201).json(newCard);
   } catch (err) {
-    console.error('Upload error:', err);
-    res.status(500).json({ error: 'Upload failed', message: err.message });
+    console.error('Upload error:', {
+      message: err.message,
+      stack: err.stack,
+      body: req.body,
+      file: req.file
+    });
+    res.status(500).json({ 
+      error: 'Upload failed',
+      message: err.message 
+    });
   }
 });
 
-// Get all saved cards
+// Get all saved cards - No changes needed
 app.get('/api/cards', async (req, res) => {
   try {
     const cards = await Card.find().sort({ createdAt: -1 });
@@ -107,7 +116,7 @@ app.get('/api/cards', async (req, res) => {
   }
 });
 
-// Get a single card by ID (for editing)
+// Get a single card by ID - No changes needed
 app.get('/api/cards/:id', async (req, res) => {
   try {
     const card = await Card.findById(req.params.id);
@@ -119,7 +128,7 @@ app.get('/api/cards/:id', async (req, res) => {
   }
 });
 
-// Update an existing card
+// Update an existing card - Added null checks for art fields
 app.put('/api/cards/:id', upload.fields([
   { name: 'cardImage', maxCount: 1 },
   { name: 'rawImage', maxCount: 1 }
@@ -139,7 +148,10 @@ app.put('/api/cards/:id', upload.fields([
       titleFontSize: req.body.titleFontSize,
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
-      imageScale: req.body.imageScale
+      imageScale: req.body.imageScale,
+      // Preserve existing art fields if not updating
+      artUrl: card.artUrl || null,
+      artFileName: card.artFileName || null
     };
 
     // Handle raw image update if provided
@@ -200,7 +212,12 @@ app.put('/api/cards/:id', upload.fields([
 
     res.json(updatedCard);
   } catch (err) {
-    console.error('❌ Update error:', err);
+    console.error('❌ Update error:', {
+      message: err.message,
+      stack: err.stack,
+      body: req.body,
+      files: req.files
+    });
     res.status(500).json({ 
       error: 'Update failed',
       message: err.message 
