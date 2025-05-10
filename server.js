@@ -1,5 +1,10 @@
 require('dotenv').config();
 
+console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
+console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? '✓' : 'MISSING');
+console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '✓' : 'MISSING');
+console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✓' : 'MISSING');
+
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
@@ -115,9 +120,9 @@ app.put('/api/cards/:id', multiUpload, async (req, res) => {
       // Delete old artwork image from Cloudinary
       await cloudinary.uploader.destroy(card.artFileName);
       
-      const artFile = req.files.rawImage[0];
-      // Art file is already uploaded by Multer-Cloudinary
-      imageUrl = artFile.secure_url;
+      const resultCard = await cloudinary.uploader.upload(req.files.cardImage[0].path);
+cardUrl = resultCard.secure_url;
+cardFileName = resultCard.public_id;
       fileName = artFile.public_id;
     }
     
@@ -127,9 +132,9 @@ app.put('/api/cards/:id', multiUpload, async (req, res) => {
         await cloudinary.uploader.destroy(card.cardFileName);
       }
       
-      const cardFile = req.files.cardImage[0];
-      // Card file is already uploaded by Multer-Cloudinary
-      cardUrl = cardFile.secure_url;
+      const resultCard = await cloudinary.uploader.upload(req.files.cardImage[0].path);
+cardUrl = resultCard.secure_url;
+cardFileName = resultCard.public_id;
       cardFileName = cardFile.public_id;
     }
 
