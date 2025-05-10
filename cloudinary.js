@@ -12,7 +12,7 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => {
-    let folder = 'cards/unknown';
+    let folder = 'cards/unknown'; // Default folder
     if (file.fieldname === 'rawImage') folder = 'cards/raw';
     if (file.fieldname === 'cardImage') folder = 'cards/rendered';
 
