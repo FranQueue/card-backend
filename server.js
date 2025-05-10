@@ -22,20 +22,10 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 // Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
-  }
+const upload = multer({
+  storage: multer.memoryStorage(), // Store file in memory (no temp files)
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB max
 });
-
-const upload = multer({ storage });
-const multiUpload = upload.fields([
-  { name: 'rawImage', maxCount: 1 },
-  { name: 'cardImage', maxCount: 1 }
-]);
 
 const app = express();
 app.use(cors());
@@ -61,39 +51,26 @@ app.get('/', (req, res) => {
 });
 
 // Upload a new card with image and metadata
-app.post('/api/upload', multiUpload, async (req, res) => {
+app.post('/api/upload', upload.single('cardImage'), async (req, res) => {
   try {
-    if (!req.files?.cardImage?.[0]) {
-      return res.status(400).json({ error: 'cardImage is missing' });
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    // Upload card image using buffer stream
-    const cardUpload = await new Promise((resolve, reject) => {
+    // Upload to Cloudinary
+    const result = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         { resource_type: 'auto' },
         (error, result) => error ? reject(error) : resolve(result)
       );
-      
+
+      // Convert buffer to stream and upload
       const bufferStream = new stream.PassThrough();
-      bufferStream.end(req.files.cardImage[0].buffer);
+      bufferStream.end(req.file.buffer);
       bufferStream.pipe(uploadStream);
     });
 
-    // Upload raw image if exists
-    let artUpload = null;
-    if (req.files.rawImage?.[0]) {
-      artUpload = await new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-          { resource_type: 'auto' },
-          (error, result) => error ? reject(error) : resolve(result)
-        );
-        
-        const bufferStream = new stream.PassThrough();
-        bufferStream.end(req.files.rawImage[0].buffer);
-        bufferStream.pipe(uploadStream);
-      });
-    }
-
+    // Save card data to MongoDB
     const newCard = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -106,34 +83,16 @@ app.post('/api/upload', multiUpload, async (req, res) => {
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
-      imageUrl: cardUpload.secure_url,
-      fileName: cardUpload.public_id,
-      artUrl: artUpload?.secure_url || null,
-      artFileName: artUpload?.public_id || null
+      imageUrl: result.secure_url,
+      fileName: result.public_id
     });
 
     await newCard.save();
 
-    // Clean up temporary files
-    if (req.files.cardImage[0].path) {
-      fs.unlinkSync(req.files.cardImage[0].path);
-    }
-    if (req.files.rawImage?.[0]?.path) {
-      fs.unlinkSync(req.files.rawImage[0].path);
-    }
-
     res.status(201).json(newCard);
   } catch (err) {
-    console.error('Upload error:', {
-      message: err.message,
-      stack: err.stack,
-      files: req.files,
-      body: req.body
-    });
-    res.status(500).json({ 
-      error: 'Upload failed',
-      message: err.message 
-    });
+    console.error('Upload error:', err);
+    res.status(500).json({ error: 'Upload failed', message: err.message });
   }
 });
 
