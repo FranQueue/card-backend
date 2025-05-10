@@ -47,17 +47,21 @@ app.post('/api/upload', multiUpload, async (req, res) => {
     const artFile = req.files.rawImage[0]; // User-uploaded artwork
     const cardFile = req.files.cardImage ? req.files.cardImage[0] : null; // Optional: If card render exists
 
+    console.log('Uploaded files:', req.files);
+
     // Art file is already uploaded by Multer-Cloudinary, get the Cloudinary URL and public_id
     const uploadedArt = artFile ? {
       secure_url: artFile.secure_url,
       public_id: artFile.public_id
     } : null;
+    console.log('Uploaded art file:', uploadedArt);
 
     // Card file is also uploaded by Multer-Cloudinary (if it exists)
     const uploadedCard = cardFile ? {
       secure_url: cardFile.secure_url,
       public_id: cardFile.public_id
     } : null;
+    console.log('Uploaded card file:', uploadedCard);
 
     // Create a new card with Cloudinary URLs
     const card = new Card({
@@ -79,7 +83,8 @@ app.post('/api/upload', multiUpload, async (req, res) => {
 
       cardUrl: uploadedCard?.secure_url, // Optional: If card render exists
       cardFileName: uploadedCard?.public_id,
-    }); // Closing the multiUpload handler
+    });
+    console.log('Card to save:', card);
 
     await card.save();
     res.status(201).json(card);
