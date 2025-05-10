@@ -1,27 +1,45 @@
 require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const mongoose = require('mongoose');
+const multer = require('multer');
+const { cloudinary } = require('./cloudinary');
+const Card = require('./models/Card');
+const fs = require('fs');
+const path = require('path');
+const stream = require('stream');
 
+// Environment verification
 console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
 console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? '✓' : 'MISSING');
 console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '✓' : 'MISSING');
 console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✓' : 'MISSING');
 
-const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
-const { upload, cloudinary } = require('./cloudinary');
-const Card = require('./models/Card');
-const cardRoutes = require('./routes/cards'); // path must match where you saved the above file
+// Create uploads directory if it doesn't exist
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
 
-
-const app = express();
-app.use(cors());
-app.use(express.json());
-
+const upload = multer({ storage });
 const multiUpload = upload.fields([
   { name: 'rawImage', maxCount: 1 },
   { name: 'cardImage', maxCount: 1 }
 ]);
+
+const app = express();
+app.use(cors());
+app.use(express.json());
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
@@ -43,18 +61,38 @@ app.get('/', (req, res) => {
 });
 
 // Upload a new card with image and metadata
-const fs = require('fs');
-
 app.post('/api/upload', multiUpload, async (req, res) => {
   try {
-    if (!req.files || !req.files.cardImage || !req.files.cardImage[0]) {
+    if (!req.files?.cardImage?.[0]) {
       return res.status(400).json({ error: 'cardImage is missing' });
     }
 
-    const resultCard = await cloudinary.uploader.upload(req.files.cardImage[0].path);
-    const resultArt = req.files.rawImage?.[0]
-      ? await cloudinary.uploader.upload(req.files.rawImage[0].path)
-      : null;
+    // Upload card image using buffer stream
+    const cardUpload = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        { resource_type: 'auto' },
+        (error, result) => error ? reject(error) : resolve(result)
+      );
+      
+      const bufferStream = new stream.PassThrough();
+      bufferStream.end(req.files.cardImage[0].buffer);
+      bufferStream.pipe(uploadStream);
+    });
+
+    // Upload raw image if exists
+    let artUpload = null;
+    if (req.files.rawImage?.[0]) {
+      artUpload = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { resource_type: 'auto' },
+          (error, result) => error ? reject(error) : resolve(result)
+        );
+        
+        const bufferStream = new stream.PassThrough();
+        bufferStream.end(req.files.rawImage[0].buffer);
+        bufferStream.pipe(uploadStream);
+      });
+    }
 
     const newCard = new Card({
       title: req.body.title,
@@ -68,17 +106,34 @@ app.post('/api/upload', multiUpload, async (req, res) => {
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
-      imageUrl: resultCard.secure_url,
-      fileName: resultCard.public_id,
-      artUrl: resultArt?.secure_url || null,
-      artFileName: resultArt?.public_id || null
+      imageUrl: cardUpload.secure_url,
+      fileName: cardUpload.public_id,
+      artUrl: artUpload?.secure_url || null,
+      artFileName: artUpload?.public_id || null
     });
 
     await newCard.save();
-    res.json(newCard);
+
+    // Clean up temporary files
+    if (req.files.cardImage[0].path) {
+      fs.unlinkSync(req.files.cardImage[0].path);
+    }
+    if (req.files.rawImage?.[0]?.path) {
+      fs.unlinkSync(req.files.rawImage[0].path);
+    }
+
+    res.status(201).json(newCard);
   } catch (err) {
-    console.error('Upload error:', err); // 👈 Logging para debug
-    res.status(500).json({ error: 'Upload failed', details: err.message });
+    console.error('Upload error:', {
+      message: err.message,
+      stack: err.stack,
+      files: req.files,
+      body: req.body
+    });
+    res.status(500).json({ 
+      error: 'Upload failed',
+      message: err.message 
+    });
   }
 });
 
@@ -105,87 +160,117 @@ app.get('/api/cards/:id', async (req, res) => {
   }
 });
 
-// Update an existing card (metadata + image, if provided)
+// Update an existing card
 app.put('/api/cards/:id', multiUpload, async (req, res) => {
   try {
     const card = await Card.findById(req.params.id);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    let imageUrl = card.artUrl;
-    let fileName = card.artFileName;
-    let cardUrl = card.cardUrl;
-    let cardFileName = card.cardFileName;
+    let updates = {
+      title: req.body.title,
+      subtitle: req.body.subtitle,
+      description: req.body.description,
+      hpCost: req.body.hpCost,
+      spCost: req.body.spCost,
+      offsetX: req.body.offsetX,
+      offsetY: req.body.offsetY,
+      titleFontSize: req.body.titleFontSize,
+      titlePositionY: req.body.titlePositionY,
+      cardType: req.body.cardType,
+      imageScale: req.body.imageScale
+    };
 
-    if (req.files.rawImage) {
-      // Delete old artwork image from Cloudinary
-      await cloudinary.uploader.destroy(card.artFileName);
-      
-      const resultCard = await cloudinary.uploader.upload(req.files.cardImage[0].path);
-cardUrl = resultCard.secure_url;
-cardFileName = resultCard.public_id;
-      fileName = artFile.public_id;
-    }
-    
-    if (req.files.cardImage) {
-      // Delete old card image from Cloudinary
-      if (card.cardFileName) {
-        await cloudinary.uploader.destroy(card.cardFileName);
+    // Handle raw image update if provided
+    if (req.files?.rawImage?.[0]) {
+      if (card.artFileName) {
+        await cloudinary.uploader.destroy(card.artFileName);
       }
-      
-      const resultCard = await cloudinary.uploader.upload(req.files.cardImage[0].path);
-cardUrl = resultCard.secure_url;
-cardFileName = resultCard.public_id;
-      cardFileName = cardFile.public_id;
+
+      const artUpload = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { resource_type: 'auto' },
+          (error, result) => error ? reject(error) : resolve(result)
+        );
+        
+        const bufferStream = new stream.PassThrough();
+        bufferStream.end(req.files.rawImage[0].buffer);
+        bufferStream.pipe(uploadStream);
+      });
+
+      updates.artUrl = artUpload.secure_url;
+      updates.artFileName = artUpload.public_id;
+
+      if (req.files.rawImage[0].path) {
+        fs.unlinkSync(req.files.rawImage[0].path);
+      }
     }
 
-    // Update metadata regardless of whether there's an image
+    // Handle card image update if provided
+    if (req.files?.cardImage?.[0]) {
+      if (card.fileName) {
+        await cloudinary.uploader.destroy(card.fileName);
+      }
+
+      const cardUpload = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { resource_type: 'auto' },
+          (error, result) => error ? reject(error) : resolve(result)
+        );
+        
+        const bufferStream = new stream.PassThrough();
+        bufferStream.end(req.files.cardImage[0].buffer);
+        bufferStream.pipe(uploadStream);
+      });
+
+      updates.imageUrl = cardUpload.secure_url;
+      updates.fileName = cardUpload.public_id;
+
+      if (req.files.cardImage[0].path) {
+        fs.unlinkSync(req.files.cardImage[0].path);
+      }
+    }
+
     const updatedCard = await Card.findByIdAndUpdate(
       req.params.id,
-      {
-        title: req.body.title,
-        subtitle: req.body.subtitle,
-        description: req.body.description,
-        hpCost: req.body.hpCost,
-        spCost: req.body.spCost,
-        offsetX: req.body.offsetX,
-        offsetY: req.body.offsetY,
-        titleFontSize: req.body.titleFontSize,
-        titlePositionY: req.body.titlePositionY,
-        cardType: req.body.cardType,
-        imageScale: req.body.imageScale,
-        artUrl: imageUrl,
-        artFileName: fileName,
-        cardUrl,
-        cardFileName,
-      },
+      updates,
       { new: true }
     );
 
     res.json(updatedCard);
   } catch (err) {
     console.error('❌ Update error:', err);
-    res.status(500).json({ error: 'Update failed' });
+    res.status(500).json({ 
+      error: 'Update failed',
+      message: err.message 
+    });
   }
 });
 
-// Delete card (from MongoDB and Cloudinary)
-app.delete('/api/delete/:id', async (req, res) => {
+// Delete card
+app.delete('/api/cards/:id', async (req, res) => {
   try {
     const card = await Card.findById(req.params.id);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    // Delete artwork image from Cloudinary
-    await cloudinary.uploader.destroy(card.artFileName);
-    if (card.cardFileName) {
-      await cloudinary.uploader.destroy(card.cardFileName);
+    // Delete images from Cloudinary
+    const deletePromises = [];
+    if (card.artFileName) {
+      deletePromises.push(cloudinary.uploader.destroy(card.artFileName));
     }
-    // Delete the card document from MongoDB
+    if (card.fileName) {
+      deletePromises.push(cloudinary.uploader.destroy(card.fileName));
+    }
+
+    await Promise.all(deletePromises);
     await card.deleteOne();
 
     res.json({ success: true });
   } catch (err) {
     console.error('❌ Delete failed:', err);
-    res.status(500).json({ error: 'Delete failed' });
+    res.status(500).json({ 
+      error: 'Delete failed',
+      message: err.message 
+    });
   }
 });
 
