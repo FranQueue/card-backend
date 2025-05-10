@@ -47,6 +47,7 @@ app.post('/api/upload', multiUpload, async (req, res) => {
     const artFile = req.files.rawImage[0]; // User-uploaded artwork
     const cardFile = req.files.cardImage ? req.files.cardImage[0] : null; // Optional: If card render exists
 
+    console.log('Request body:', req.body);
     console.log('Uploaded files:', req.files);
 
     // Art file is already uploaded by Multer-Cloudinary, get the Cloudinary URL and public_id
