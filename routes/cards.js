@@ -1,33 +1,13 @@
 const express = require('express');
-const multer = require('multer');
-const { v2: cloudinary } = require('cloudinary');
-const streamifier = require('streamifier');
-const Card = require('../Card'); // Adjust the path if Card.js is elsewhere
+const { upload, cloudinary } = require('../cloudinary'); // assuming you export from cloudinary.js
+const Card = require('../Card'); // adjust path if needed
 
 const router = express.Router();
-const upload = multer();
 
-cloudinary.config({
-  cloud_name: process.env.CLOUD_NAME,
-  api_key: process.env.CLOUD_API_KEY,
-  api_secret: process.env.CLOUD_API_SECRET,
-});
-
-// Helper to upload buffer to Cloudinary
-const uploadToCloudinary = (buffer, folder) => {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream({ folder }, (error, result) => {
-      if (result) resolve(result.secure_url);
-      else reject(error);
-    });
-    streamifier.createReadStream(buffer).pipe(stream);
-  });
-};
-
-// CREATE card route (used in App.jsx's POST /api/upload)
+// CREATE card
 router.post('/upload', upload.fields([
-  { name: 'cardImage' },
-  { name: 'rawImage' },
+  { name: 'cardImage', maxCount: 1 },
+  { name: 'rawImage', maxCount: 1 },
 ]), async (req, res) => {
   try {
     const {
@@ -36,67 +16,113 @@ router.post('/upload', upload.fields([
       titleFontSize, titlePositionY, cardType, imageScale
     } = req.body;
 
-    const cardBuffer = req.files['cardImage']?.[0]?.buffer;
-    const rawBuffer = req.files['rawImage']?.[0]?.buffer;
+    const cardFile = req.files['cardImage']?.[0];
+    const rawFile = req.files['rawImage']?.[0];
 
-    let cardUrl = null;
-    let artUrl = null;
+    const cardUrl = cardFile?.path;
+    const cardFileName = cardFile?.filename;
 
-    if (cardBuffer) cardUrl = await uploadToCloudinary(cardBuffer, 'cards/rendered');
-    if (rawBuffer) artUrl = await uploadToCloudinary(rawBuffer, 'cards/raw');
+    const artUrl = rawFile?.path;
+    const artFileName = rawFile?.filename;
 
     const card = new Card({
       title, subtitle, description, hpCost, spCost,
       offsetX, offsetY, titleFontSize, titlePositionY,
-      cardType, imageScale, cardUrl, artUrl
+      cardType, imageScale,
+      cardUrl, cardFileName,
+      artUrl, artFileName
     });
 
     await card.save();
-    res.json(card);
+    res.status(201).json(card);
   } catch (err) {
-    console.error('Upload error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('❌ Upload error:', err);
+    res.status(500).json({ error: 'Upload failed' });
   }
 });
 
 // GET all cards
 router.get('/cards', async (req, res) => {
-  const cards = await Card.find().sort({ createdAt: -1 });
-  res.json(cards);
+  try {
+    const cards = await Card.find().sort({ createdAt: -1 });
+    res.json(cards);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch cards' });
+  }
 });
 
 // GET one card
 router.get('/cards/:id', async (req, res) => {
-  const card = await Card.findById(req.params.id);
-  res.json(card);
+  try {
+    const card = await Card.findById(req.params.id);
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+    res.json(card);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch card' });
+  }
 });
 
 // UPDATE card
 router.put('/cards/:id', upload.fields([
-  { name: 'cardImage' },
-  { name: 'rawImage' },
+  { name: 'cardImage', maxCount: 1 },
+  { name: 'rawImage', maxCount: 1 },
 ]), async (req, res) => {
   try {
-    const update = { ...req.body };
+    const card = await Card.findById(req.params.id);
+    if (!card) return res.status(404).json({ error: 'Card not found' });
 
-    const cardBuffer = req.files['cardImage']?.[0]?.buffer;
-    const rawBuffer = req.files['rawImage']?.[0]?.buffer;
+    const rawFile = req.files['rawImage']?.[0];
+    const cardFile = req.files['cardImage']?.[0];
 
-    if (cardBuffer) update.cardUrl = await uploadToCloudinary(cardBuffer, 'cards/rendered');
-    if (rawBuffer) update.artUrl = await uploadToCloudinary(rawBuffer, 'cards/raw');
+    if (rawFile) {
+      if (card.artFileName) await cloudinary.uploader.destroy(card.artFileName);
+      card.artUrl = rawFile.path;
+      card.artFileName = rawFile.filename;
+    }
 
-    const updatedCard = await Card.findByIdAndUpdate(req.params.id, update, { new: true });
-    res.json(updatedCard);
+    if (cardFile) {
+      if (card.cardFileName) await cloudinary.uploader.destroy(card.cardFileName);
+      card.cardUrl = cardFile.path;
+      card.cardFileName = cardFile.filename;
+    }
+
+    Object.assign(card, {
+      title: req.body.title,
+      subtitle: req.body.subtitle,
+      description: req.body.description,
+      hpCost: req.body.hpCost,
+      spCost: req.body.spCost,
+      offsetX: req.body.offsetX,
+      offsetY: req.body.offsetY,
+      titleFontSize: req.body.titleFontSize,
+      titlePositionY: req.body.titlePositionY,
+      cardType: req.body.cardType,
+      imageScale: req.body.imageScale
+    });
+
+    await card.save();
+    res.json(card);
   } catch (err) {
-    console.error('Update error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('❌ Update error:', err);
+    res.status(500).json({ error: 'Update failed' });
   }
 });
 
 // DELETE card
 router.delete('/delete/:id', async (req, res) => {
-  await Card.findByIdAndDelete(req.params.id);
-  res.json({ message: 'Card deleted' });
+  try {
+    const card = await Card.findById(req.params.id);
+    if (!card) return res.status(404).json({ error: 'Card not found' });
+
+    if (card.artFileName) await cloudinary.uploader.destroy(card.artFileName);
+    if (card.cardFileName) await cloudinary.uploader.destroy(card.cardFileName);
+
+    await card.deleteOne();
+    res.json({ message: 'Card deleted' });
+  } catch (err) {
+    console.error('❌ Delete error:', err);
+    res.status(500).json({ error: 'Delete failed' });
+  }
 });
 
 module.exports = router;
