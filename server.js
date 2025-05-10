@@ -1,8 +1,13 @@
+require('dotenv').config();
+
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 const { upload, cloudinary } = require('./cloudinary');
 const Card = require('./models/Card');
+const cardRoutes = require('./routes/cards'); // path must match where you saved the above file
+
+
 
 const app = express();
 app.use(cors());
