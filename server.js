@@ -38,33 +38,35 @@ app.get('/', (req, res) => {
 });
 
 // Upload a new card with image and metadata
+const fs = require('fs');
+
 app.post('/api/upload', multiUpload, async (req, res) => {
   try {
     if (!req.files || !req.files.rawImage) {
       return res.status(400).json({ error: 'No artwork provided' });
     }
-  
-    const artFile = req.files.rawImage[0]; // User-uploaded artwork
-    const cardFile = req.files.cardImage ? req.files.cardImage[0] : null; // Optional: If card render exists
 
-    console.log('Request body:', req.body);
-    console.log('Uploaded files:', req.files);
+    const artFile = req.files.rawImage[0];
+    const cardFile = req.files.cardImage ? req.files.cardImage[0] : null;
 
-    // Art file is already uploaded by Multer-Cloudinary, get the Cloudinary URL and public_id
-    const uploadedArt = artFile ? {
-      secure_url: artFile.secure_url,
-      public_id: artFile.public_id
-    } : null;
-    console.log('Uploaded art file:', uploadedArt);
+    console.log('📦 Received upload:', req.body);
 
-    // Card file is also uploaded by Multer-Cloudinary (if it exists)
-    const uploadedCard = cardFile ? {
-      secure_url: cardFile.secure_url,
-      public_id: cardFile.public_id
-    } : null;
-    console.log('Uploaded card file:', uploadedCard);
+    // ✅ Manually upload rawImage to Cloudinary
+    const uploadedArt = await cloudinary.uploader.upload(artFile.path, {
+      folder: 'card-art',
+    });
 
-    // Create a new card with Cloudinary URLs
+    let uploadedCard = null;
+    if (cardFile) {
+      uploadedCard = await cloudinary.uploader.upload(cardFile.path, {
+        folder: 'card-render',
+      });
+    }
+
+    // ✅ Clean up local temp files
+    fs.unlinkSync(artFile.path);
+    if (cardFile) fs.unlinkSync(cardFile.path);
+
     const card = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -77,21 +79,17 @@ app.post('/api/upload', multiUpload, async (req, res) => {
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
-
-      // Save Cloudinary URLs and public IDs
-      artUrl: uploadedArt?.secure_url,
-      artFileName: uploadedArt?.public_id,
-
-      cardUrl: uploadedCard?.secure_url, // Optional: If card render exists
-      cardFileName: uploadedCard?.public_id,
+      artUrl: uploadedArt.secure_url,
+      artFileName: uploadedArt.public_id,
+      cardUrl: uploadedCard?.secure_url || null,
+      cardFileName: uploadedCard?.public_id || null,
     });
-    console.log('Card to save:', card);
 
     await card.save();
+    console.log('✅ Card saved:', card);
     res.status(201).json(card);
   } catch (err) {
     console.error('❌ Upload error:', err);
-    console.error('❌ Upload error details:', err);
     res.status(500).json({ error: 'Upload failed', details: err.message });
   }
 });
