@@ -120,7 +120,10 @@ app.get('/api/cards/:id', async (req, res) => {
 });
 
 // Update an existing card
-app.put('/api/cards/:id', multiUpload, async (req, res) => {
+app.put('/api/cards/:id', upload.fields([
+  { name: 'cardImage', maxCount: 1 },
+  { name: 'rawImage', maxCount: 1 }
+]), async (req, res) => {
   try {
     const card = await Card.findById(req.params.id);
     if (!card) return res.status(404).json({ error: 'Card not found' });
