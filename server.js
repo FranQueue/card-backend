@@ -91,7 +91,8 @@ app.post('/api/upload', multiUpload, async (req, res) => {
     res.status(201).json(card);
   } catch (err) {
     console.error('❌ Upload error:', err);
-    res.status(500).json({ error: 'Upload failed' });
+    console.error('❌ Upload error details:', err);
+    res.status(500).json({ error: 'Upload failed', details: err.message });
   }
 });
 
