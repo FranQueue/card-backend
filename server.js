@@ -79,12 +79,8 @@ app.post('/api/upload', multiUpload, async (req, res) => {
 
       cardUrl: uploadedCard?.secure_url, // Optional: If card render exists
       cardFileName: uploadedCard?.public_id,
-    catch (err) {
-      console.error('❌ Upload error:', err);
-      res.status(500).json({ error: 'Upload failed' });
-    }
-  });
-  
+    }); // Closing the multiUpload handler
+
     await card.save();
     res.status(201).json(card);
   } catch (err) {
