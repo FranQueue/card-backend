@@ -42,32 +42,16 @@ const fs = require('fs');
 
 app.post('/api/upload', multiUpload, async (req, res) => {
   try {
-    if (!req.files || !req.files.rawImage) {
-      return res.status(400).json({ error: 'No artwork provided' });
+    if (!req.files || !req.files.cardImage || !req.files.cardImage[0]) {
+      return res.status(400).json({ error: 'cardImage is missing' });
     }
 
-    const artFile = req.files.rawImage[0];
-    const cardFile = req.files.cardImage ? req.files.cardImage[0] : null;
+    const resultCard = await cloudinary.uploader.upload(req.files.cardImage[0].path);
+    const resultArt = req.files.rawImage?.[0]
+      ? await cloudinary.uploader.upload(req.files.rawImage[0].path)
+      : null;
 
-    console.log('📦 Received upload:', req.body);
-
-    // ✅ Manually upload rawImage to Cloudinary
-    const uploadedArt = await cloudinary.uploader.upload(artFile.path, {
-      folder: 'card-art',
-    });
-
-    let uploadedCard = null;
-    if (cardFile) {
-      uploadedCard = await cloudinary.uploader.upload(cardFile.path, {
-        folder: 'card-render',
-      });
-    }
-
-    // ✅ Clean up local temp files
-    fs.unlinkSync(artFile.path);
-    if (cardFile) fs.unlinkSync(cardFile.path);
-
-    const card = new Card({
+    const newCard = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
       description: req.body.description,
@@ -79,17 +63,16 @@ app.post('/api/upload', multiUpload, async (req, res) => {
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
-      artUrl: uploadedArt.secure_url,
-      artFileName: uploadedArt.public_id,
-      cardUrl: uploadedCard?.secure_url || null,
-      cardFileName: uploadedCard?.public_id || null,
+      imageUrl: resultCard.secure_url,
+      fileName: resultCard.public_id,
+      artUrl: resultArt?.secure_url || null,
+      artFileName: resultArt?.public_id || null
     });
 
-    await card.save();
-    console.log('✅ Card saved:', card);
-    res.status(201).json(card);
+    await newCard.save();
+    res.json(newCard);
   } catch (err) {
-    console.error('❌ Upload error:', err);
+    console.error('Upload error:', err); // 👈 Logging para debug
     res.status(500).json({ error: 'Upload failed', details: err.message });
   }
 });
