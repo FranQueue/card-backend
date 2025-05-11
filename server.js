@@ -67,23 +67,26 @@ app.post('/api/upload', upload.fields([
     }
 
     // Upload card image to Cloudinary
-    const cardUpload = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
+    // For card image upload
+const cardUpload = await new Promise((resolve, reject) => {
+  const uploadStream = cloudinary.uploader.upload_stream(
+    {
+      folder: 'card-gallery/cards',
+      resource_type: 'image',
+      transformation: [
         {
-          folder: 'card-gallery/cards',
-          resource_type: 'image',
-          transformation: [
-            { width: 384, height: 617, crop: 'fill', quality: 'auto:best' }
-          ]
-        },
-        (error, result) => error ? reject(error) : resolve(result)
-      );
-
-      const bufferStream = new stream.PassThrough();
-      bufferStream.end(req.files.cardImage[0].buffer);
-      bufferStream.pipe(uploadStream);
-    });
-
+          width: 384,
+          height: 617,
+          crop: 'pad', // Changed from 'fill' to maintain aspect ratio
+          background: 'transparent',
+          gravity: 'center' // Ensures content is centered
+        }
+      ]
+    },
+    (error, result) => error ? reject(error) : resolve(result)
+  );
+  bufferStream.pipe(uploadStream);
+});
     // Upload raw artwork if provided
     let artUpload = null;
     if (req.files?.rawImage) {
