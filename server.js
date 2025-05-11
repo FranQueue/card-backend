@@ -65,7 +65,10 @@ app.post('/api/upload', upload.single('cardImage'), async (req, res) => {
     // Upload to Cloudinary
     const result = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { resource_type: 'auto' },
+        { 
+          resource_type: 'auto',
+          folder: 'card-gallery' // Add this line
+        },
         (error, result) => error ? reject(error) : resolve(result)
       );
 
@@ -167,7 +170,10 @@ app.put('/api/cards/:id', upload.fields([
 
       const artUpload = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
-          { resource_type: 'auto' },
+          { 
+            resource_type: 'auto',
+            folder: 'card-gallery' // Add this
+          },
           (error, result) => error ? reject(error) : resolve(result)
         );
         
