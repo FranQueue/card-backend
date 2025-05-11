@@ -58,80 +58,142 @@ app.post('/api/upload', upload.fields([
   try {
     console.log('Upload request received. Files:', {
       cardImage: req.files?.cardImage?.[0]?.originalname,
-      rawImage: req.files?.rawImage?.[0]?.originalname
+      rawImage: req.files?.rawImage?.[0]?.originalname,
+      metadata: {
+        title: req.body.title,
+        dimensions: `${req.body.offsetX},${req.body.offsetY}`,
+        type: req.body.cardType
+      }
     });
 
     if (!req.files?.cardImage) {
-      return res.status(400).json({ error: 'Card image is required' });
+      return res.status(400).json({ 
+        error: 'Card image is required',
+        receivedFiles: Object.keys(req.files || {})
+      });
     }
 
-    // Helper function for Cloudinary upload
+    // Enhanced Cloudinary upload helper with timeout
     const uploadToCloudinary = (file, folder, transformations) => {
       return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
             folder: folder,
             resource_type: 'image',
-            transformation: transformations
+            transformation: transformations,
+            quality_analysis: true,
+            format: 'png',
+            allowed_formats: ['png']
           },
           (error, result) => error ? reject(error) : resolve(result)
         );
 
-        // Create stream from buffer
         const bufferStream = new stream.PassThrough();
         bufferStream.end(file.buffer);
         bufferStream.pipe(uploadStream);
+        
+        // Add timeout (15 seconds)
+        setTimeout(() => {
+          if (!uploadStream.destroyed) {
+            uploadStream.destroy(new Error('Upload timeout'));
+          }
+        }, 15000);
       });
     };
 
-    // Upload card image
+    // Upload card image with precise centering
     const cardUpload = await uploadToCloudinary(
       req.files.cardImage[0],
       'card-gallery/cards',
       [
-        { width: 384, height: 617, crop: 'pad', background: 'transparent', gravity: 'center' }
+        {
+          width: 384,
+          height: 617,
+          crop: 'pad',
+          background: 'transparent',
+          gravity: 'center',
+          quality: 'auto:best',
+          fetch_format: 'auto',
+          dpr: 'auto'
+        }
       ]
     );
 
-    // Upload raw artwork if provided
+    console.log('Card image uploaded:', {
+      url: cardUpload.secure_url,
+      dimensions: cardUpload.width + 'x' + cardUpload.height
+    });
+
+    // Upload raw artwork with different transformations
     let artUpload = null;
     if (req.files?.rawImage) {
       artUpload = await uploadToCloudinary(
         req.files.rawImage[0],
         'card-gallery/artwork',
         [
-          { width: 800, crop: 'scale', quality: 'auto:best' }
+          {
+            width: 800,
+            crop: 'limit',
+            quality: 'auto:best',
+            gravity: 'auto',
+            format: 'png'
+          }
         ]
       );
+      console.log('Artwork uploaded:', artUpload.secure_url);
     }
 
-    // Save to MongoDB
-    const newCard = new Card({
-      title: req.body.title,
-      subtitle: req.body.subtitle,
-      description: req.body.description,
-      hpCost: req.body.hpCost,
-      spCost: req.body.spCost,
-      offsetX: req.body.offsetX,
-      offsetY: req.body.offsetY,
-      titleFontSize: req.body.titleFontSize,
-      titlePositionY: req.body.titlePositionY,
-      cardType: req.body.cardType,
-      imageScale: req.body.imageScale,
+    // Enhanced card data validation
+    const cardData = {
+      title: req.body.title || 'Untitled Card',
+      subtitle: req.body.subtitle || '',
+      description: req.body.description || '',
+      hpCost: req.body.hpCost || '0',
+      spCost: req.body.spCost || '0',
+      offsetX: req.body.offsetX || 0,
+      offsetY: req.body.offsetY || 0,
+      titleFontSize: req.body.titleFontSize || 45,
+      titlePositionY: req.body.titlePositionY || 205,
+      cardType: req.body.cardType || 'physical',
+      imageScale: req.body.imageScale || 1,
       imageUrl: cardUpload.secure_url,
       fileName: cardUpload.public_id,
       artUrl: artUpload?.secure_url || null,
-      artFileName: artUpload?.public_id || null
+      artFileName: artUpload?.public_id || null,
+      metadata: {
+        centered: true,
+        source: 'card-creator',
+        version: '2.0'
+      }
+    };
+
+    const newCard = new Card(cardData);
+    await newCard.save();
+
+    console.log('Card saved to DB:', newCard._id);
+    
+    res.status(201).json({
+      success: true,
+      card: newCard,
+      imageDetails: {
+        cardUrl: cardUpload.secure_url,
+        artUrl: artUpload?.secure_url,
+        dimensions: `${cardUpload.width}x${cardUpload.height}`
+      }
     });
 
-    await newCard.save();
-    res.status(201).json(newCard);
-
   } catch (err) {
-    console.error('Upload error:', err);
+    console.error('Upload error:', {
+      message: err.message,
+      stack: err.stack,
+      timestamp: new Date().toISOString()
+    });
+    
     res.status(500).json({ 
       error: 'Upload failed',
-      message: err.message
+      message: err.message,
+      suggestion: 'Please check the image format and try again',
+      timestamp: new Date().toISOString()
     });
   }
 });
