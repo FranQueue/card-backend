@@ -52,6 +52,11 @@ app.get('/', (req, res) => {
 
 // Upload a new card with image and metadata
 app.post('/api/upload', upload.single('cardImage'), async (req, res) => {
+  console.log('Upload request received. File info:', {
+    originalname: req.file?.originalname,
+    size: req.file?.size,
+    mimetype: req.file?.mimetype
+  });
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
