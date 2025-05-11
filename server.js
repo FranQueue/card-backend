@@ -8,6 +8,7 @@ const Card = require('./models/Card');
 const fs = require('fs');
 const path = require('path');
 const stream = require('stream');
+const sharp = require('sharp');
 
 // Environment verification
 console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
@@ -56,144 +57,106 @@ app.post('/api/upload', upload.fields([
   { name: 'rawImage', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    console.log('Upload request received. Files:', {
-      cardImage: req.files?.cardImage?.[0]?.originalname,
-      rawImage: req.files?.rawImage?.[0]?.originalname,
-      metadata: {
-        title: req.body.title,
-        dimensions: `${req.body.offsetX},${req.body.offsetY}`,
-        type: req.body.cardType
-      }
-    });
-
     if (!req.files?.cardImage) {
-      return res.status(400).json({ 
-        error: 'Card image is required',
-        receivedFiles: Object.keys(req.files || {})
-      });
+      return res.status(400).json({ error: 'Card image is required' });
     }
 
-    // Enhanced Cloudinary upload helper with timeout
-    const uploadToCloudinary = (file, folder, transformations) => {
-      return new Promise((resolve, reject) => {
+    // 1. Process the card image exactly like your frontend export
+    const processedCardBuffer = await sharp(req.files.cardImage[0].buffer)
+      .resize(384, 617, {
+        fit: 'contain',
+        background: { r: 0, g: 0, b: 0, alpha: 0 } // Transparent background
+      })
+      .toBuffer();
+
+    // 2. Upload to Cloudinary with the same dimensions
+    const cardUpload = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'card-gallery/cards',
+          resource_type: 'image',
+          format: 'png',
+          transformation: [
+            {
+              width: 384,
+              height: 617,
+              crop: 'scale', // Changed to match your export
+              background: 'transparent',
+              quality: 'auto:best'
+            }
+          ]
+        },
+        (error, result) => error ? reject(error) : resolve(result)
+      );
+
+      const bufferStream = new stream.PassThrough();
+      bufferStream.end(processedCardBuffer);
+      bufferStream.pipe(uploadStream);
+    });
+
+    // 3. Process raw artwork separately (if provided)
+    let artUpload = null;
+    if (req.files?.rawImage) {
+      artUpload = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: folder,
+            folder: 'card-gallery/artwork',
             resource_type: 'image',
-            transformation: transformations,
-            quality_analysis: true,
             format: 'png',
-            allowed_formats: ['png']
+            transformation: [
+              {
+                width: 800,
+                crop: 'scale',
+                quality: 'auto:best'
+              }
+            ]
           },
           (error, result) => error ? reject(error) : resolve(result)
         );
 
         const bufferStream = new stream.PassThrough();
-        bufferStream.end(file.buffer);
+        bufferStream.end(req.files.rawImage[0].buffer);
         bufferStream.pipe(uploadStream);
-        
-        // Add timeout (15 seconds)
-        setTimeout(() => {
-          if (!uploadStream.destroyed) {
-            uploadStream.destroy(new Error('Upload timeout'));
-          }
-        }, 15000);
       });
-    };
-
-    // Upload card image with precise centering
-    const cardUpload = await uploadToCloudinary(
-      req.files.cardImage[0],
-      'card-gallery/cards',
-      [
-        {
-          width: 384,
-          height: 617,
-          crop: 'pad',
-          background: 'transparent',
-          gravity: 'center',
-          quality: 'auto:best',
-          fetch_format: 'auto',
-          dpr: 'auto'
-        }
-      ]
-    );
-
-    console.log('Card image uploaded:', {
-      url: cardUpload.secure_url,
-      dimensions: cardUpload.width + 'x' + cardUpload.height
-    });
-
-    // Upload raw artwork with different transformations
-    let artUpload = null;
-    if (req.files?.rawImage) {
-      artUpload = await uploadToCloudinary(
-        req.files.rawImage[0],
-        'card-gallery/artwork',
-        [
-          {
-            width: 800,
-            crop: 'limit',
-            quality: 'auto:best',
-            gravity: 'auto',
-            format: 'png'
-          }
-        ]
-      );
-      console.log('Artwork uploaded:', artUpload.secure_url);
     }
 
-    // Enhanced card data validation
-    const cardData = {
-      title: req.body.title || 'Untitled Card',
-      subtitle: req.body.subtitle || '',
-      description: req.body.description || '',
-      hpCost: req.body.hpCost || '0',
-      spCost: req.body.spCost || '0',
-      offsetX: req.body.offsetX || 0,
-      offsetY: req.body.offsetY || 0,
-      titleFontSize: req.body.titleFontSize || 45,
-      titlePositionY: req.body.titlePositionY || 205,
-      cardType: req.body.cardType || 'physical',
-      imageScale: req.body.imageScale || 1,
+    // 4. Save to MongoDB
+    const newCard = new Card({
+      title: req.body.title,
+      subtitle: req.body.subtitle,
+      description: req.body.description,
+      hpCost: req.body.hpCost,
+      spCost: req.body.spCost,
+      offsetX: req.body.offsetX,
+      offsetY: req.body.offsetY,
+      titleFontSize: req.body.titleFontSize,
+      titlePositionY: req.body.titlePositionY,
+      cardType: req.body.cardType,
+      imageScale: req.body.imageScale,
       imageUrl: cardUpload.secure_url,
       fileName: cardUpload.public_id,
       artUrl: artUpload?.secure_url || null,
-      artFileName: artUpload?.public_id || null,
-      metadata: {
-        centered: true,
-        source: 'card-creator',
-        version: '2.0'
-      }
-    };
+      artFileName: artUpload?.public_id || null
+    });
 
-    const newCard = new Card(cardData);
     await newCard.save();
-
-    console.log('Card saved to DB:', newCard._id);
     
     res.status(201).json({
       success: true,
       card: newCard,
       imageDetails: {
-        cardUrl: cardUpload.secure_url,
-        artUrl: artUpload?.secure_url,
-        dimensions: `${cardUpload.width}x${cardUpload.height}`
+        width: 384,
+        height: 617,
+        format: 'png'
       }
     });
 
   } catch (err) {
-    console.error('Upload error:', {
-      message: err.message,
-      stack: err.stack,
-      timestamp: new Date().toISOString()
-    });
-    
+    console.error('Upload error:', err);
     res.status(500).json({ 
       error: 'Upload failed',
       message: err.message,
-      suggestion: 'Please check the image format and try again',
-      timestamp: new Date().toISOString()
+      suggestion: 'This error typically occurs when image processing fails. Please check your image format.'
     });
   }
 });
