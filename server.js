@@ -67,6 +67,7 @@ app.post('/api/upload', upload.fields([
           folder: 'card-gallery/cards',
           resource_type: 'image',
           format: 'png',
+          quality: "auto",
           transformation: [
             {
               width: 384,
@@ -101,7 +102,7 @@ app.post('/api/upload', upload.fields([
               {
                 width: 800,
                 crop: 'scale',
-                quality: 'auto:best'
+                quality: 'auto'
               }
             ]
           },
