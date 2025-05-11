@@ -10,7 +10,7 @@ const path = require('path');
 const stream = require('stream');
 
 // Environment verification
-console.log('CLOUDINARY_CLOUD_NAME:', 'dbb1fjhhf');
+console.log('CLOUDINARY_CLOUD_NAME:','dbb1fjhhf');
 console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? '✓' : 'MISSING');
 console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '✓' : 'MISSING');
 console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✓' : 'MISSING');
