@@ -60,6 +60,11 @@ app.post('/api/upload', upload.fields([
       return res.status(400).json({ error: 'Card image is required' });
     }
 
+    const cardBuffer = req.files.cardImage[0].buffer;
+    if (cardBuffer.length > 5 * 1024 * 1024) {
+      return res.status(413).json({ message: "Card image too large (max 5MB)" });
+    }
+
     // Upload card image with transformations that match your export
     const cardUpload = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
