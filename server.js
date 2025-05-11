@@ -51,34 +51,61 @@ app.get('/', (req, res) => {
 });
 
 // Upload a new card with image and metadata
-app.post('/api/upload', upload.single('cardImage'), async (req, res) => {
-  console.log('Upload request received. File info:', {
-    originalname: req.file?.originalname,
-    size: req.file?.size,
-    mimetype: req.file?.mimetype
-  });
+app.post('/api/upload', upload.fields([
+  { name: 'cardImage', maxCount: 1 },
+  { name: 'rawImage', maxCount: 1 }
+]), async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+    console.log('Upload request received. Files:', {
+      cardImage: req.files?.cardImage?.[0]?.originalname,
+      rawImage: req.files?.rawImage?.[0]?.originalname,
+      body: req.body
+    });
+
+    if (!req.files?.cardImage) {
+      return res.status(400).json({ error: 'Card image is required' });
     }
 
-    // Upload to Cloudinary
-    const result = await new Promise((resolve, reject) => {
+    // Upload card image to Cloudinary
+    const cardUpload = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { 
-          resource_type: 'auto',
-          folder: 'card-gallery' // Add this line
+        {
+          folder: 'card-gallery/cards',
+          resource_type: 'image',
+          transformation: [
+            { width: 384, height: 617, crop: 'fill', quality: 'auto:best' }
+          ]
         },
         (error, result) => error ? reject(error) : resolve(result)
       );
 
-      // Convert buffer to stream and upload
       const bufferStream = new stream.PassThrough();
-      bufferStream.end(req.file.buffer);
+      bufferStream.end(req.files.cardImage[0].buffer);
       bufferStream.pipe(uploadStream);
     });
 
-    // Save card data to MongoDB - Added default null values for art fields
+    // Upload raw artwork if provided
+    let artUpload = null;
+    if (req.files?.rawImage) {
+      artUpload = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'card-gallery/artwork',
+            resource_type: 'image',
+            transformation: [
+              { width: 800, crop: 'scale', quality: 'auto:best' }
+            ]
+          },
+          (error, result) => error ? reject(error) : resolve(result)
+        );
+
+        const bufferStream = new stream.PassThrough();
+        bufferStream.end(req.files.rawImage[0].buffer);
+        bufferStream.pipe(uploadStream);
+      });
+    }
+
+    // Save to MongoDB
     const newCard = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -91,24 +118,29 @@ app.post('/api/upload', upload.single('cardImage'), async (req, res) => {
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
-      imageUrl: result.secure_url,
-      fileName: result.public_id,
-      artUrl: null,  // Explicitly set to null
-      artFileName: null  // Explicitly set to null
+      imageUrl: cardUpload.secure_url,
+      fileName: cardUpload.public_id,
+      artUrl: artUpload?.secure_url || null,
+      artFileName: artUpload?.public_id || null
     });
 
     await newCard.save();
+    
+    console.log('Card saved successfully:', newCard._id);
     res.status(201).json(newCard);
+
   } catch (err) {
     console.error('Upload error:', {
       message: err.message,
       stack: err.stack,
-      body: req.body,
-      file: req.file
+      files: req.files,
+      body: req.body
     });
+    
     res.status(500).json({ 
       error: 'Upload failed',
-      message: err.message 
+      message: err.message,
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
 });
