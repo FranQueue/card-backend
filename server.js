@@ -58,54 +58,51 @@ app.post('/api/upload', upload.fields([
   try {
     console.log('Upload request received. Files:', {
       cardImage: req.files?.cardImage?.[0]?.originalname,
-      rawImage: req.files?.rawImage?.[0]?.originalname,
-      body: req.body
+      rawImage: req.files?.rawImage?.[0]?.originalname
     });
 
     if (!req.files?.cardImage) {
       return res.status(400).json({ error: 'Card image is required' });
     }
 
-    // Upload card image to Cloudinary
-    // For card image upload
-const cardUpload = await new Promise((resolve, reject) => {
-  const uploadStream = cloudinary.uploader.upload_stream(
-    {
-      folder: 'card-gallery/cards',
-      resource_type: 'image',
-      transformation: [
-        {
-          width: 384,
-          height: 617,
-          crop: 'pad', // Changed from 'fill' to maintain aspect ratio
-          background: 'transparent',
-          gravity: 'center' // Ensures content is centered
-        }
-      ]
-    },
-    (error, result) => error ? reject(error) : resolve(result)
-  );
-  bufferStream.pipe(uploadStream);
-});
-    // Upload raw artwork if provided
-    let artUpload = null;
-    if (req.files?.rawImage) {
-      artUpload = await new Promise((resolve, reject) => {
+    // Helper function for Cloudinary upload
+    const uploadToCloudinary = (file, folder, transformations) => {
+      return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: 'card-gallery/artwork',
+            folder: folder,
             resource_type: 'image',
-            transformation: [
-              { width: 800, crop: 'scale', quality: 'auto:best' }
-            ]
+            transformation: transformations
           },
           (error, result) => error ? reject(error) : resolve(result)
         );
 
+        // Create stream from buffer
         const bufferStream = new stream.PassThrough();
-        bufferStream.end(req.files.rawImage[0].buffer);
+        bufferStream.end(file.buffer);
         bufferStream.pipe(uploadStream);
       });
+    };
+
+    // Upload card image
+    const cardUpload = await uploadToCloudinary(
+      req.files.cardImage[0],
+      'card-gallery/cards',
+      [
+        { width: 384, height: 617, crop: 'pad', background: 'transparent', gravity: 'center' }
+      ]
+    );
+
+    // Upload raw artwork if provided
+    let artUpload = null;
+    if (req.files?.rawImage) {
+      artUpload = await uploadToCloudinary(
+        req.files.rawImage[0],
+        'card-gallery/artwork',
+        [
+          { width: 800, crop: 'scale', quality: 'auto:best' }
+        ]
+      );
     }
 
     // Save to MongoDB
@@ -128,22 +125,13 @@ const cardUpload = await new Promise((resolve, reject) => {
     });
 
     await newCard.save();
-    
-    console.log('Card saved successfully:', newCard._id);
     res.status(201).json(newCard);
 
   } catch (err) {
-    console.error('Upload error:', {
-      message: err.message,
-      stack: err.stack,
-      files: req.files,
-      body: req.body
-    });
-    
+    console.error('Upload error:', err);
     res.status(500).json({ 
       error: 'Upload failed',
-      message: err.message,
-      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+      message: err.message
     });
   }
 });
