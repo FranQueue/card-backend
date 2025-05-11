@@ -61,15 +61,7 @@ app.post('/api/upload', upload.fields([
       return res.status(400).json({ error: 'Card image is required' });
     }
 
-    // 1. Process the card image exactly like your frontend export
-    const processedCardBuffer = await sharp(req.files.cardImage[0].buffer)
-      .resize(384, 617, {
-        fit: 'contain',
-        background: { r: 0, g: 0, b: 0, alpha: 0 } // Transparent background
-      })
-      .toBuffer();
-
-    // 2. Upload to Cloudinary with the same dimensions
+    // Upload card image with transformations that match your export
     const cardUpload = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
@@ -80,7 +72,10 @@ app.post('/api/upload', upload.fields([
             {
               width: 384,
               height: 617,
-              crop: 'scale', // Changed to match your export
+              crop: 'fill',
+              gravity: 'custom', // Custom gravity for precise control
+              x: 0.5, // Center horizontally
+              y: 0.5, // Center vertically
               background: 'transparent',
               quality: 'auto:best'
             }
@@ -90,11 +85,11 @@ app.post('/api/upload', upload.fields([
       );
 
       const bufferStream = new stream.PassThrough();
-      bufferStream.end(processedCardBuffer);
+      bufferStream.end(req.files.cardImage[0].buffer);
       bufferStream.pipe(uploadStream);
     });
 
-    // 3. Process raw artwork separately (if provided)
+    // Upload raw artwork if provided
     let artUpload = null;
     if (req.files?.rawImage) {
       artUpload = await new Promise((resolve, reject) => {
@@ -120,7 +115,7 @@ app.post('/api/upload', upload.fields([
       });
     }
 
-    // 4. Save to MongoDB
+    // Save to MongoDB
     const newCard = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -156,7 +151,7 @@ app.post('/api/upload', upload.fields([
     res.status(500).json({ 
       error: 'Upload failed',
       message: err.message,
-      suggestion: 'This error typically occurs when image processing fails. Please check your image format.'
+      suggestion: 'Please check your image and try again'
     });
   }
 });
