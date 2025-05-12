@@ -65,8 +65,8 @@ app.post('/api/upload', upload.fields([
     }
 
     const cardBuffer = req.files.cardImage[0].buffer;
-    if (cardBuffer.length > 5 * 1024 * 1024) {
-      return res.status(413).json({ message: "Card image too large (max 5MB)" });
+    if (cardBuffer.length > 20 * 1024 * 1024) {
+      return res.status(413).json({ message: "Card image too large (max 20MB)" });
     }
 
     // Upload card image with transformations that match your export
