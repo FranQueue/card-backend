@@ -180,27 +180,30 @@ app.post('/api/upload', upload.fields([
 // Get all saved cards - No changes needed
 app.get('/api/cards', async (req, res) => {
   try {
-    const cards = await Card.find(); // ✅ fetch cards first
+    const cards = await Card.find().sort({ createdAt: -1 });
 
-    // In your backend's GET /api/cards endpoint
     const cardsWithThumbnails = cards.map(card => {
       const imageUrl = card.imageUrl || '';
       let thumbnailUrl = imageUrl;
 
       if (imageUrl.includes('res.cloudinary.com')) {
-        // Generate thumbnail URL for images in card-gallery/cards
-        thumbnailUrl = imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
-      } else {
-        console.warn(`Missing imageUrl for card: ${card.title}`);
+        // Handle different Cloudinary URL formats
+        if (imageUrl.includes('/upload/')) {
+          // For URLs with /upload/ already
+          thumbnailUrl = imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
+        } else {
+          // For URLs without /upload/ (older format)
+          const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+          const publicId = card.fileName; // Use the stored public_id
+          thumbnailUrl = `https://res.cloudinary.com/${cloudName}/image/upload/w_200,h_320,c_fill/${publicId}`;
+        }
       }
 
       return {
         ...card.toObject(),
-        thumbnailUrl,
+        thumbnailUrl
       };
     });
-
-    console.log('Generated cards with thumbnails:', cardsWithThumbnails);
 
     res.json(cardsWithThumbnails);
   } catch (err) {

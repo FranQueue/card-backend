@@ -18,8 +18,8 @@ const cardSchema = new mongoose.Schema({
   artFileName: { type: String},
 
   // Card render image (optional)
-  cardUrl: String,
-  cardFileName: String,
+  imageUrl: { type: String },
+  fileName: { type: String },
 
   createdAt: { type: Date, default: Date.now }
 });
