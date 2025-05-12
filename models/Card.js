@@ -19,7 +19,8 @@ const cardSchema = new mongoose.Schema({
 
   // Card render image (optional)
   imageUrl: { type: String },
-  cardImage: { type: String }, // Add cardImage field to the schema
+  cardImage: { type: String },
+  thumbnailUrl: { type: String }, // Add thumbnailUrl field to the schema
   fileName: { type: String },
 
   createdAt: { type: Date, default: Date.now }
