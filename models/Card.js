@@ -13,16 +13,16 @@ const cardSchema = new mongoose.Schema({
   cardType: String,
   imageScale: Number,
 
-  // Artwork image (uploaded by user)
-  artUrl: { type: String},
-  artFileName: { type: String},
+  // Artwork (raw image)
+  artUrl: String,
+  artFileName: String,
 
-  // Card render image (optional)
-  imageUrl: { type: String },
-  cardImage: { type: String },
-  thumbnailUrl: { type: String }, // Add thumbnailUrl field to the schema
-  fileName: { type: String },
+  // Rendered card (final image)
+  cardUrl: String,      // Primary field for full card image
+  cardFileName: String,
 
+  // System-generated
+  thumbnailUrl: String, // Auto-generated thumbnail
   createdAt: { type: Date, default: Date.now }
 });
 

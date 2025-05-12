@@ -16,28 +16,35 @@ router.post('/upload', upload.fields([
       titleFontSize, titlePositionY, cardType, imageScale
     } = req.body;
 
-    const cardFile = req.files['cardImage']?.[0];
-    const rawFile = req.files['rawImage']?.[0];
+    // 1. Upload FULL CARD IMAGE to Cloudinary
+    const cardUpload = await cloudinary.uploader.upload(req.files.cardImage[0].path, {
+      folder: 'card-gallery/full-cards',
+      transformation: [
+        { width: 384, height: 617, crop: 'fill' }
+      ]
+    });
 
-    const cardUrl = cardFile?.path;
-    const cardFileName = cardFile?.filename;
+    // 2. Upload RAW ARTWORK (if exists)
+    let artUpload = null;
+    if (req.files.rawImage) {
+      artUpload = await cloudinary.uploader.upload(req.files.rawImage[0].path, {
+        folder: 'card-gallery/artwork'
+      });
+    }
 
-    const artUrl = rawFile?.path;
-    const artFileName = rawFile?.filename;
+    // 3. Generate thumbnail URL (Cloudinary auto-transform)
+    const thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_200,h_320,c_fill/');
 
-    const thumbnailUrl = cardUrl ? cardUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/') : null;
-
-    console.log('Thumbnail URL during creation:', thumbnailUrl); // Debug log
-
+    // 4. Save to database
     const card = new Card({
       title, subtitle, description, hpCost, spCost,
       offsetX, offsetY, titleFontSize, titlePositionY,
       cardType, imageScale,
-      cardUrl, cardFileName,
-      artUrl, artFileName,
-      imageUrl: cardUrl, // Set imageUrl to cardUrl
-      cardImage: cardUrl, // Set cardImage to cardUrl for frontend compatibility
-      thumbnailUrl // Set thumbnailUrl for gallery thumbnails
+      cardUrl: cardUpload.secure_url,
+      cardFileName: cardUpload.public_id,
+      artUrl: artUpload?.secure_url || null,
+      artFileName: artUpload?.public_id || null,
+      thumbnailUrl // Store the pre-generated thumbnail
     });
 
     await card.save();
@@ -52,8 +59,17 @@ router.post('/upload', upload.fields([
 router.get('/cards', async (req, res) => {
   try {
     const cards = await Card.find().sort({ createdAt: -1 });
-    console.log('API Response for /cards:', cards.map(card => ({ id: card._id, thumbnailUrl: card.thumbnailUrl }))); // Debug log
-    res.json(cards);
+
+    // Ensure thumbnails exist for all cards
+    const cardsWithThumbnails = cards.map(card => {
+      // If thumbnail doesn't exist, generate it from cardUrl
+      if (!card.thumbnailUrl && card.cardUrl) {
+        card.thumbnailUrl = card.cardUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
+      }
+      return card;
+    });
+
+    res.json(cardsWithThumbnails);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch cards' });
   }
