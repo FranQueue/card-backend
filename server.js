@@ -8,6 +8,7 @@ const Card = require('./models/Card');
 const fs = require('fs');
 const path = require('path');
 const stream = require('stream');
+const sharp = require('sharp');
 
 // Environment verification
 console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
@@ -69,7 +70,18 @@ app.post('/api/upload', upload.fields([
       return res.status(413).json({ message: "Card image too large (max 20MB)" });
     }
 
-    // Upload card image with transformations that match your export
+    // Step 1: Resize and compress the image using sharp
+    const compressedBuffer = await sharp(cardBuffer)
+      .resize({
+        width: 384, // Desired width
+        height: 617, // Desired height
+        fit: 'cover', // Ensures the image covers the whole area, cropping if needed
+        position: 'center', // Focus the crop on the center of the image
+      })
+      .jpeg({ quality: 80 }) // Compress the image to reduce the file size (optional)
+      .toBuffer(); // Convert the sharp output to a buffer
+
+    // Step 2: Create a stream and upload to Cloudinary
     const cardUpload = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
@@ -77,15 +89,15 @@ app.post('/api/upload', upload.fields([
           resource_type: 'image',
           format: 'png',
           quality: "auto",
-          // Removed the transformation settings to avoid scaling
         },
         (error, result) => error ? reject(error) : resolve(result)
       );
-    
-      const bufferStream = new stream.PassThrough();
-      bufferStream.end(req.files.cardImage[0].buffer);
-      bufferStream.pipe(uploadStream);
-    });
+
+// Create a buffer stream to pipe into Cloudinary
+const bufferStream = new stream.PassThrough();
+bufferStream.end(compressedBuffer);
+bufferStream.pipe(uploadStream);
+});
     
     
 
