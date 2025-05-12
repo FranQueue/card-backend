@@ -16,6 +16,45 @@ console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? '✓' : 'MIS
 console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '✓' : 'MISSING');
 console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✓' : 'MISSING');
 
+// Add this helper function
+const processArtworkImage = async (buffer) => {
+  // First resize while maintaining aspect ratio
+  const resized = await sharp(buffer)
+    .resize({
+      width: 800,
+      height: 800,
+      fit: 'inside',
+      withoutEnlargement: true,
+      background: { r: 255, g: 255, b: 255, alpha: 0 }
+    })
+    .png({ quality: 80 })
+    .toBuffer();
+
+  // Get dimensions of resized image
+  const { width, height } = await sharp(resized).metadata();
+
+  // Calculate centering offsets
+  const offsetX = Math.max(0, Math.floor((800 - width) / 2));
+  const offsetY = Math.max(0, Math.floor((800 - height) / 2));
+
+  // Create final image with transparent background
+  return sharp({
+    create: {
+      width: 800,
+      height: 800,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    }
+  })
+  .composite([{
+    input: resized,
+    top: offsetY,
+    left: offsetX
+  }])
+  .png()
+  .toBuffer();
+};
+
 // Create uploads directory if it doesn't exist
 const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
@@ -70,74 +109,93 @@ app.post('/api/upload', upload.fields([
     const cardBuffer = req.files.cardImage[0].buffer;
     const rawBuffer = req.files?.rawImage?.[0]?.buffer || null;
 
-    // Optional: Apply sharp to resize and compress both images before upload
-
-    // Resize and compress the card image
+    // Process card image (unchanged)
     const compressedCardBuffer = await sharp(cardBuffer)
       .resize({
-        width: 384, // Resize to desired dimensions
+        width: 384,
         height: 617, 
-        fit: 'cover', // Crop if necessary
-        position: 'center', // Focus crop on center
+        fit: 'cover',
+        position: 'center',
       })
-      .jpeg({ quality: 60 }) // Reduce quality for further compression (optional)
-      .toBuffer(); // Get the resulting buffer
+      .jpeg({ quality: 60 })
+      .toBuffer();
 
-    // If rawImage exists, resize and compress it
+    // Process artwork image with new improved method
     let artUpload = null;
     if (rawBuffer) {
-      const compressedRawBuffer = await sharp(rawBuffer)
-  .resize({
-    width: 800,  // Increased size for better quality
-    height: 800,
-    fit: 'inside',  // Changed from 'cover' to 'inside' to prevent cropping
-    withoutEnlargement: true,  // Don't enlarge smaller images
-    background: { r: 255, g: 255, b: 255, alpha: 0 }  // Transparent background
-  })
-  .png({ quality: 80, compressionLevel: 9 })  // Better PNG quality
-  .toBuffer();
+      // Step 1: Resize while maintaining aspect ratio
+      const resizedArtBuffer = await sharp(rawBuffer)
+        .resize({
+          width: 800,
+          height: 800,
+          fit: 'inside',
+          withoutEnlargement: true,
+          background: { r: 255, g: 255, b: 255, alpha: 0 }
+        })
+        .png({ quality: 80 })
+        .toBuffer();
 
-      // Upload raw image to Cloudinary
+      // Step 2: Get dimensions for centering
+      const { width, height } = await sharp(resizedArtBuffer).metadata();
+      const offsetX = Math.max(0, Math.floor((800 - width) / 2));
+      const offsetY = Math.max(0, Math.floor((800 - height) / 2));
+
+      // Step 3: Create final centered image on transparent background
+      const finalArtBuffer = await sharp({
+        create: {
+          width: 800,
+          height: 800,
+          channels: 4,
+          background: { r: 0, g: 0, b: 0, alpha: 0 }
+        }
+      })
+      .composite([{
+        input: resizedArtBuffer,
+        top: offsetY,
+        left: offsetX
+      }])
+      .png()
+      .toBuffer();
+
+      // Upload processed artwork to Cloudinary
       artUpload = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
             folder: 'card-gallery/artwork',
             resource_type: 'image',
             format: 'png',
-            quality: 'auto:best',  // Better quality setting
+            quality: 'auto:best',
             transformation: [
-              { width: 800, height: 800, crop: 'scale' }  // Scale instead of fill
+              { width: 800, height: 800, crop: 'pad', background: 'transparent' }
             ]
           },
           (error, result) => error ? reject(error) : resolve(result)
         );
 
         const bufferStream = new stream.PassThrough();
-        bufferStream.end(compressedRawBuffer); // Pipe the buffer to upload stream
+        bufferStream.end(finalArtBuffer);
         bufferStream.pipe(uploadStream);
       });
     }
 
-    // Upload the compressed card image to Cloudinary
+    // Upload card image (unchanged)
     const cardUpload = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          folder: 'card-gallery/cards', // Store in 'cards' folder
+          folder: 'card-gallery/cards',
           resource_type: 'image',
           format: 'png',
-          quality: 'auto', // Let Cloudinary optimize quality
+          quality: 'auto',
         },
         (error, result) => error ? reject(error) : resolve(result)
       );
 
       const bufferStream = new stream.PassThrough();
-      bufferStream.end(compressedCardBuffer); // Pipe the compressed card buffer
+      bufferStream.end(compressedCardBuffer);
       bufferStream.pipe(uploadStream);
     });
 
-    console.log('Card image uploaded to Cloudinary:', cardUpload.secure_url);
-
-    // Save the card details to MongoDB
+    // Create and save card document
     const newCard = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -150,20 +208,15 @@ app.post('/api/upload', upload.fields([
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
-      // Updated field names:
       cardUrl: cardUpload.secure_url,
       cardFileName: cardUpload.public_id,
       artUrl: artUpload?.secure_url || null,
       artFileName: artUpload?.public_id || null,
-      // Add thumbnail generation:
       thumbnailUrl: cardUpload.secure_url.replace('/upload/', '/upload/w_384,h_617,c_fill/')
     });
-    
 
-    // Save the new card to MongoDB
     await newCard.save();
     
-    // Send the response back
     res.status(201).json({
       success: true,
       card: newCard,
