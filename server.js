@@ -79,12 +79,12 @@ app.post('/api/upload', upload.fields([
           quality: "auto",
           transformation: [
             {
-              width: 384,
-              height: 617,
-              crop: 'fill',
-              gravity: 'custom', // Custom gravity for precise control
-              x: 0.5, // Center horizontally
-              y: 0.5, // Center vertically
+              width: 384,   // Desired width
+              height: 617,  // Desired height
+              crop: 'fill', // Ensure the image is cropped to fit the given dimensions
+              gravity: 'custom',
+              x: 0.5,       // Center horizontally
+              y: 0.5,       // Center vertically
               background: 'transparent',
               quality: 'auto:best'
             }
@@ -92,11 +92,12 @@ app.post('/api/upload', upload.fields([
         },
         (error, result) => error ? reject(error) : resolve(result)
       );
-
+    
       const bufferStream = new stream.PassThrough();
       bufferStream.end(req.files.cardImage[0].buffer);
       bufferStream.pipe(uploadStream);
     });
+    
 
     // Upload raw artwork if provided
     let artUpload = null;
