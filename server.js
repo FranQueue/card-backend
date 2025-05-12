@@ -188,6 +188,8 @@ app.get('/api/cards', async (req, res) => {
       if (imageUrl.includes('res.cloudinary.com')) {
         // Generate thumbnail URL for images in card-gallery/cards
         thumbnailUrl = imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
+      } else {
+        console.warn(`Missing imageUrl for card: ${card.title}`);
       }
 
       return {
