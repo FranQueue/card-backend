@@ -186,7 +186,7 @@ app.get('/api/cards', async (req, res) => {
       let thumbnailUrl = imageUrl;
 
       if (imageUrl.includes('res.cloudinary.com')) {
-        // Simple transformation - just add dimensions before the filename
+        // Generate thumbnail URL for images in card-gallery/cards
         thumbnailUrl = imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
       }
 
