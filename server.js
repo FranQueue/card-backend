@@ -146,11 +146,15 @@ app.post('/api/upload', upload.fields([
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
-      imageUrl: cardUpload.secure_url,
-      fileName: cardUpload.public_id,
+      // Updated field names:
+      cardUrl: cardUpload.secure_url,
+      cardFileName: cardUpload.public_id,
       artUrl: artUpload?.secure_url || null,
-      artFileName: artUpload?.public_id || null
+      artFileName: artUpload?.public_id || null,
+      // Add thumbnail generation:
+      thumbnailUrl: cardUpload.secure_url.replace('/upload/', '/upload/w_200,h_320,c_fill/')
     });
+    
 
     // Save the new card to MongoDB
     await newCard.save();
@@ -183,13 +187,12 @@ app.get('/api/cards', async (req, res) => {
     const cards = await Card.find().sort({ createdAt: -1 });
 
     const cardsWithThumbnails = cards.map(card => {
-      // Use thumbnailUrl if it exists, otherwise generate from cardUrl
       const thumbnailUrl = card.thumbnailUrl || 
         (card.cardUrl ? card.cardUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/') : null);
       
       return {
         ...card.toObject(),
-        thumbnailUrl: thumbnailUrl || '/card-example.png' // Fallback to default
+        thumbnailUrl: thumbnailUrl || '/card-example.png'
       };
     });
 
@@ -234,9 +237,12 @@ app.put('/api/cards/:id', upload.fields([
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
       // Preserve existing art fields if not updating
-      artUrl: card.artUrl || null,
-      artFileName: card.artFileName || null
-    };
+      cardUrl: card.cardUrl,
+  cardFileName: card.cardFileName,
+  artUrl: card.artUrl || null,
+  artFileName: card.artFileName || null,
+  thumbnailUrl: card.thumbnailUrl || null
+};
 
     // Handle raw image update if provided
     if (req.files?.rawImage?.[0]) {
@@ -268,8 +274,8 @@ app.put('/api/cards/:id', upload.fields([
 
     // Handle card image update if provided
     if (req.files?.cardImage?.[0]) {
-      if (card.fileName) {
-        await cloudinary.uploader.destroy(card.fileName);
+      if (card.cardFileName) {
+        await cloudinary.uploader.destroy(card.cardFileName);
       }
 
       const cardUpload = await new Promise((resolve, reject) => {
@@ -283,13 +289,10 @@ app.put('/api/cards/:id', upload.fields([
         bufferStream.pipe(uploadStream);
       });
 
-      updates.imageUrl = cardUpload.secure_url;
-      updates.fileName = cardUpload.public_id;
-
-      if (req.files.cardImage[0].path) {
-        fs.unlinkSync(req.files.cardImage[0].path);
-      }
-    }
+      updates.cardUrl = cardUpload.secure_url;
+  updates.cardFileName = cardUpload.public_id;
+  updates.thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_200,h_320,c_fill/');
+}
 
     const updatedCard = await Card.findByIdAndUpdate(
       req.params.id,
@@ -323,8 +326,8 @@ app.delete('/api/cards/:id', async (req, res) => {
     if (card.artFileName) {
       deletePromises.push(cloudinary.uploader.destroy(card.artFileName));
     }
-    if (card.fileName) {
-      deletePromises.push(cloudinary.uploader.destroy(card.fileName));
+    if (card.cardFileName) {
+      deletePromises.push(cloudinary.uploader.destroy(card.cardFileName));
     }
 
     await Promise.all(deletePromises);
