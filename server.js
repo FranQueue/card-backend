@@ -183,31 +183,19 @@ app.get('/api/cards', async (req, res) => {
     const cards = await Card.find().sort({ createdAt: -1 });
 
     const cardsWithThumbnails = cards.map(card => {
-      const imageUrl = card.imageUrl || '';
-      let thumbnailUrl = imageUrl;
-
-      if (imageUrl.includes('res.cloudinary.com')) {
-        // Handle different Cloudinary URL formats
-        if (imageUrl.includes('/upload/')) {
-          // For URLs with /upload/ already
-          thumbnailUrl = imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
-        } else {
-          // For URLs without /upload/ (older format)
-          const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-          const publicId = card.fileName; // Use the stored public_id
-          thumbnailUrl = `https://res.cloudinary.com/${cloudName}/image/upload/w_200,h_320,c_fill/${publicId}`;
-        }
-      }
-
+      // Use thumbnailUrl if it exists, otherwise generate from cardUrl
+      const thumbnailUrl = card.thumbnailUrl || 
+        (card.cardUrl ? card.cardUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/') : null);
+      
       return {
         ...card.toObject(),
-        thumbnailUrl
+        thumbnailUrl: thumbnailUrl || '/card-example.png' // Fallback to default
       };
     });
 
     res.json(cardsWithThumbnails);
   } catch (err) {
-    console.error('❌ Fetch error:', err);
+    console.error('Fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch cards' });
   }
 });
