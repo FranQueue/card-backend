@@ -349,5 +349,27 @@ app.delete('/api/cards/:id', async (req, res) => {
   }
 });
 
+// Temporary endpoint to backfill imageUrl for existing cards
+app.post('/api/backfill-image-url', async (req, res) => {
+  try {
+    const cards = await Card.find();
+
+    const updatePromises = cards.map(async (card) => {
+      if (!card.imageUrl && card.fileName) {
+        const imageUrl = `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload/${card.fileName}`;
+        card.imageUrl = imageUrl;
+        await card.save();
+      }
+    });
+
+    await Promise.all(updatePromises);
+
+    res.status(200).json({ message: 'Backfill completed successfully' });
+  } catch (err) {
+    console.error('Error during backfill:', err);
+    res.status(500).json({ error: 'Backfill failed', message: err.message });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
