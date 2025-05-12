@@ -131,6 +131,8 @@ app.post('/api/upload', upload.fields([
       bufferStream.pipe(uploadStream);
     });
 
+    console.log('Card image uploaded to Cloudinary:', cardUpload.secure_url);
+
     // Save the card details to MongoDB
     const newCard = new Card({
       title: req.body.title,
