@@ -87,23 +87,27 @@ app.post('/api/upload', upload.fields([
     let artUpload = null;
     if (rawBuffer) {
       const compressedRawBuffer = await sharp(rawBuffer)
-        .resize({
-          width: 600, // Resize as needed for the artwork
-          height: 600,
-          fit: 'cover',
-          position: 'center',
-        })
-        .jpeg({ quality: 60 }) // Optional compression for raw image
-        .toBuffer(); // Get the resulting buffer
+  .resize({
+    width: 800,  // Increased size for better quality
+    height: 800,
+    fit: 'inside',  // Changed from 'cover' to 'inside' to prevent cropping
+    withoutEnlargement: true,  // Don't enlarge smaller images
+    background: { r: 255, g: 255, b: 255, alpha: 0 }  // Transparent background
+  })
+  .png({ quality: 80, compressionLevel: 9 })  // Better PNG quality
+  .toBuffer();
 
       // Upload raw image to Cloudinary
       artUpload = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: 'card-gallery/artwork', // Store in 'artwork' folder
+            folder: 'card-gallery/artwork',
             resource_type: 'image',
-            format: 'png', // Keep the image in PNG format
-            quality: 'auto', // Let Cloudinary optimize quality
+            format: 'png',
+            quality: 'auto:best',  // Better quality setting
+            transformation: [
+              { width: 800, height: 800, crop: 'scale' }  // Scale instead of fill
+            ]
           },
           (error, result) => error ? reject(error) : resolve(result)
         );
@@ -250,15 +254,30 @@ app.put('/api/cards/:id', upload.fields([
         await cloudinary.uploader.destroy(card.artFileName);
       }
 
-      const artUpload = await new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-          { 
-            resource_type: 'auto',
-            folder: 'card-gallery' // Add this
-          },
-          (error, result) => error ? reject(error) : resolve(result)
-        );
-        
+      const compressedRawBuffer = await sharp(req.files.rawImage[0].buffer)
+    .resize({
+      width: 800,
+      height: 800,
+      fit: 'inside',
+      withoutEnlargement: true,
+      background: { r: 255, g: 255, b: 255, alpha: 0 }
+    })
+    .png({ quality: 80, compressionLevel: 9 })
+    .toBuffer();
+
+  artUpload = await new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'card-gallery/artwork',
+        resource_type: 'image',
+        format: 'png',
+        quality: 'auto:best',
+        transformation: [
+          { width: 800, height: 800, crop: 'scale' }
+        ]
+      },
+      (error, result) => error ? reject(error) : resolve(result)
+    );
         const bufferStream = new stream.PassThrough();
         bufferStream.end(req.files.rawImage[0].buffer);
         bufferStream.pipe(uploadStream);
