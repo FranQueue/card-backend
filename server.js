@@ -152,7 +152,7 @@ app.post('/api/upload', upload.fields([
       artUrl: artUpload?.secure_url || null,
       artFileName: artUpload?.public_id || null,
       // Add thumbnail generation:
-      thumbnailUrl: cardUpload.secure_url.replace('/upload/', '/upload/w_200,h_320,c_fill/')
+      thumbnailUrl: cardUpload.secure_url.replace('/upload/', '/upload/w_384,h_617,c_fill/')
     });
     
 
@@ -188,7 +188,7 @@ app.get('/api/cards', async (req, res) => {
 
     const cardsWithThumbnails = cards.map(card => {
       const thumbnailUrl = card.thumbnailUrl || 
-        (card.cardUrl ? card.cardUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/') : null);
+        (card.cardUrl ? card.cardUrl.replace('/upload/', '/upload/w_384,h_617,c_fill/') : null);
       
       return {
         ...card.toObject(),
@@ -291,7 +291,7 @@ app.put('/api/cards/:id', upload.fields([
 
       updates.cardUrl = cardUpload.secure_url;
   updates.cardFileName = cardUpload.public_id;
-  updates.thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_200,h_320,c_fill/');
+  updates.thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_384,h_617,c_fill/');
 }
 
     const updatedCard = await Card.findByIdAndUpdate(

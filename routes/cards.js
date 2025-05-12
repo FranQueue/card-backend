@@ -25,7 +25,7 @@ router.post('/upload', upload.fields([
     }
 
     // 3. Generate thumbnail URL
-    const thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_200,h_320,c_fill/');
+    const thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_384,h_617,c_fill/');
 
     // 4. Save to database (USE cardUrl NOT imageUrl)
     const card = new Card({
@@ -64,7 +64,7 @@ router.get('/cards', async (req, res) => {
       // Use cardUrl as the primary source for thumbnails
       if (card.cardUrl && !card.thumbnailUrl) {
         card.thumbnailUrl = card.cardUrl.includes('/upload/') 
-          ? card.cardUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/')
+          ? card.cardUrl.replace('/upload/', '/upload/w_384,h_617,c_fill/')
           : `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload/w_200,h_320,c_fill/${card.cardFileName}`;
       }
       return card;
@@ -123,7 +123,7 @@ router.put('/cards/:id', upload.fields([
 
       card.cardUrl = cardUpload.secure_url;            // Changed from imageUrl
       card.cardFileName = cardUpload.public_id;        // Changed from fileName
-      card.thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_200,h_320,c_fill/');
+      card.thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_384,h_617,c_fill/');
     }
 
     // Update other fields
@@ -170,7 +170,7 @@ router.post('/migrate-thumbnails', async (req, res) => {
     for (const card of cards) {
       if (card.cardUrl && !card.thumbnailUrl) {
         card.thumbnailUrl = card.cardUrl.includes('/upload/') 
-          ? card.cardUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/')
+          ? card.cardUrl.replace('/upload/', '/upload/w_384,h_617,c_fill/')
           : `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/image/upload/w_200,h_320,c_fill/${card.cardFileName}`;
         await card.save();
         updatedCount++;
