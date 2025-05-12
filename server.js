@@ -196,6 +196,8 @@ app.get('/api/cards', async (req, res) => {
       };
     });
 
+    console.log('Generated cards with thumbnails:', cardsWithThumbnails);
+
     res.json(cardsWithThumbnails);
   } catch (err) {
     console.error('❌ Fetch error:', err);
