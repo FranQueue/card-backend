@@ -10,7 +10,7 @@ const path = require('path');
 const stream = require('stream');
 
 // Environment verification
-console.log('CLOUDINARY_CLOUD_NAME:','dbb1fjhhf');
+console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
 console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? '✓' : 'MISSING');
 console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '✓' : 'MISSING');
 console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✓' : 'MISSING');
@@ -30,6 +30,9 @@ const upload = multer({
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.get('/api/healthcheck', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
