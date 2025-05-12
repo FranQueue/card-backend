@@ -24,7 +24,7 @@ if (!fs.existsSync(uploadDir)) {
 // Configure multer for file uploads
 const upload = multer({
   storage: multer.memoryStorage(), // Store file in memory (no temp files)
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB max
+  limits: { fileSize: 20 * 1024 * 1024 } // 20MB max
 });
 
 const app = express();
