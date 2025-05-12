@@ -31,7 +31,8 @@ router.post('/upload', upload.fields([
       cardType, imageScale,
       cardUrl, cardFileName,
       artUrl, artFileName,
-      imageUrl: cardUrl // Set imageUrl to cardUrl
+      imageUrl: cardUrl, // Set imageUrl to cardUrl
+      cardImage: cardUrl // Set cardImage to cardUrl for frontend compatibility
     });
 
     await card.save();
@@ -86,6 +87,7 @@ router.put('/cards/:id', upload.fields([
       card.cardUrl = cardFile.path;
       card.cardFileName = cardFile.filename;
       card.imageUrl = cardFile.path; // Update imageUrl when cardFile is updated
+      card.cardImage = cardFile.path; // Update cardImage for frontend compatibility
     }
 
     Object.assign(card, {
