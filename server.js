@@ -184,26 +184,17 @@ app.get('/api/cards', async (req, res) => {
     const cardsWithThumbnails = cards.map(card => {
       const imageUrl = card.imageUrl || '';
       let thumbnailUrl = imageUrl;
-    
+      
       if (imageUrl.includes('res.cloudinary.com')) {
-        if (imageUrl.includes('/upload/')) {
-          thumbnailUrl = imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
-        } else {
-          const parts = imageUrl.split('/');
-          const uploadIndex = parts.findIndex(part => part === 'image');
-          if (uploadIndex > -1) {
-            parts.splice(uploadIndex + 1, 0, 'upload', 'w_200,h_320,c_fill');
-            thumbnailUrl = parts.join('/');
-          }
-        }
+        // Simple transformation - just add dimensions before the filename
+        thumbnailUrl = imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
       }
-    
-  
-  return {
-    ...card.toObject(),
-    thumbnailUrl
-  };
-});
+      
+      return {
+        ...card.toObject(),
+        thumbnailUrl
+      };
+    });
 
     res.json(cardsWithThumbnails);
   } catch (err) {
