@@ -77,18 +77,7 @@ app.post('/api/upload', upload.fields([
           resource_type: 'image',
           format: 'png',
           quality: "auto",
-          transformation: [
-            {
-              width: 384,   // Desired width
-              height: 617,  // Desired height
-              crop: 'fill', // Ensure the image is cropped to fit the given dimensions
-              gravity: 'custom',
-              x: 0.5,       // Center horizontally
-              y: 0.5,       // Center vertically
-              background: 'transparent',
-              quality: 'auto:best'
-            }
-          ]
+          // Removed the transformation settings to avoid scaling
         },
         (error, result) => error ? reject(error) : resolve(result)
       );
@@ -97,6 +86,7 @@ app.post('/api/upload', upload.fields([
       bufferStream.end(req.files.cardImage[0].buffer);
       bufferStream.pipe(uploadStream);
     });
+    
     
 
     // Upload raw artwork if provided
