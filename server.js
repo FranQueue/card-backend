@@ -71,15 +71,15 @@ app.post('/api/upload', upload.fields([
     }
 
     // Step 1: Resize and compress the image using sharp
-    const compressedBuffer = await sharp(cardBuffer)
-      .resize({
-        width: 384, // Desired width
-        height: 617, // Desired height
-        fit: 'cover', // Ensures the image covers the whole area, cropping if needed
-        position: 'center', // Focus the crop on the center of the image
-      })
-      .jpeg({ quality: 80 }) // Compress the image to reduce the file size (optional)
-      .toBuffer(); // Convert the sharp output to a buffer
+const compressedBuffer = await sharp(cardBuffer)
+.resize({
+  width: 384, // Desired width
+  height: 617, // Desired height
+  fit: 'cover', // Ensures the image covers the whole area, cropping if needed
+  position: 'center', // Focus the crop on the center of the image
+})
+.jpeg({ quality: 60 }) // Reduce quality to 60 for better compression (you can adjust this)
+.toBuffer(); // Convert the sharp output to a buffer
 
     // Step 2: Create a stream and upload to Cloudinary
     const cardUpload = await new Promise((resolve, reject) => {
@@ -88,7 +88,7 @@ app.post('/api/upload', upload.fields([
           folder: 'card-gallery/cards',
           resource_type: 'image',
           format: 'png',
-          quality: "auto",
+          quality: "90",
         },
         (error, result) => error ? reject(error) : resolve(result)
       );
