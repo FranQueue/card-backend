@@ -50,6 +50,7 @@ router.post('/upload', upload.fields([
 router.get('/cards', async (req, res) => {
   try {
     const cards = await Card.find().sort({ createdAt: -1 });
+    console.log('Fetched cards:', cards); // Debug log to verify thumbnailUrl
     res.json(cards);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch cards' });
