@@ -107,13 +107,7 @@ app.post('/api/upload', upload.fields([
             folder: 'card-gallery/artwork',
             resource_type: 'image',
             format: 'png',
-            transformation: [
-              {
-                width: 800,
-                crop: 'scale',
-                quality: 'auto'
-              }
-            ]
+            quality: "auto",
           },
           (error, result) => error ? reject(error) : resolve(result)
         );
