@@ -70,16 +70,21 @@ app.post('/api/upload', upload.fields([
       return res.status(413).json({ message: "Card image too large (max 20MB)" });
     }
 
-    // Step 1: Resize and compress the image using sharp
+    // Log the size of the file before and after compression
+console.log('Original file size:', cardBuffer.length);  // Size before compression
+
+// Step 1: Resize and compress the image using sharp
 const compressedBuffer = await sharp(cardBuffer)
-.resize({
-  width: 384, // Desired width
-  height: 617, // Desired height
-  fit: 'cover', // Ensures the image covers the whole area, cropping if needed
-  position: 'center', // Focus the crop on the center of the image
-})
-.jpeg({ quality: 60 }) // Reduce quality to 60 for better compression (you can adjust this)
-.toBuffer(); // Convert the sharp output to a buffer
+  .resize({
+    width: 384, // Desired width
+    height: 617, // Desired height
+    fit: 'cover', // Ensures the image covers the whole area, cropping if needed
+    position: 'center', // Focus the crop on the center of the image
+  })
+  .png({ quality: 80, compressionLevel: 9 }) // PNG compression with a high compression level
+  .toBuffer(); // Convert the sharp output to a buffer
+
+console.log('Compressed file size:', compressedBuffer.length);  // Check the size after compression
 
     // Step 2: Create a stream and upload to Cloudinary
     const cardUpload = await new Promise((resolve, reject) => {
