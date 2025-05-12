@@ -178,10 +178,13 @@ app.post('/api/upload', upload.fields([
 // Get all saved cards - No changes needed
 app.get('/api/cards', async (req, res) => {
   try {
+    const cards = await Card.find(); // ✅ fetch cards first
+
     const cardsWithThumbnails = cards.map(card => ({
       ...card.toObject(),
-      thumbnailUrl: card.imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/')
+      thumbnailUrl: card.imageUrl?.replace('/upload/', '/upload/w_200,h_320,c_fill/')
     }));
+
     res.json(cardsWithThumbnails);
   } catch (err) {
     console.error('❌ Fetch error:', err);
