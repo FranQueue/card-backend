@@ -61,72 +61,77 @@ app.post('/api/upload', upload.fields([
   { name: 'rawImage', maxCount: 1 }
 ]), async (req, res) => {
   try {
+    // Ensure cardImage exists in the request
     if (!req.files?.cardImage) {
       return res.status(400).json({ error: 'Card image is required' });
     }
 
+    // Get the raw image buffer if it exists
     const cardBuffer = req.files.cardImage[0].buffer;
-    if (cardBuffer.length > 20 * 1024 * 1024) {
-      return res.status(413).json({ message: "Card image too large (max 20MB)" });
-    }
+    const rawBuffer = req.files?.rawImage?.[0]?.buffer || null;
 
-    // Log the size of the file before and after compression
-console.log('Original file size:', cardBuffer.length);  // Size before compression
+    // Optional: Apply sharp to resize and compress both images before upload
 
-// Step 1: Resize and compress the image using sharp
-const compressedBuffer = await sharp(cardBuffer)
-  .resize({
-    width: 384, // Desired width
-    height: 617, // Desired height
-    fit: 'cover', // Ensures the image covers the whole area, cropping if needed
-    position: 'center', // Focus the crop on the center of the image
-  })
-  .png({ quality: 80, compressionLevel: 9 }) // PNG compression with a high compression level
-  .toBuffer(); // Convert the sharp output to a buffer
+    // Resize and compress the card image
+    const compressedCardBuffer = await sharp(cardBuffer)
+      .resize({
+        width: 384, // Resize to desired dimensions
+        height: 617, 
+        fit: 'cover', // Crop if necessary
+        position: 'center', // Focus crop on center
+      })
+      .jpeg({ quality: 60 }) // Reduce quality for further compression (optional)
+      .toBuffer(); // Get the resulting buffer
 
-console.log('Compressed file size:', compressedBuffer.length);  // Check the size after compression
-
-    // Step 2: Create a stream and upload to Cloudinary
-    const cardUpload = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: 'card-gallery/cards',
-          resource_type: 'image',
-          format: 'png',
-          quality: "90",
-        },
-        (error, result) => error ? reject(error) : resolve(result)
-      );
-
-// Create a buffer stream to pipe into Cloudinary
-const bufferStream = new stream.PassThrough();
-bufferStream.end(compressedBuffer);
-bufferStream.pipe(uploadStream);
-});
-    
-    
-
-    // Upload raw artwork if provided
+    // If rawImage exists, resize and compress it
     let artUpload = null;
-    if (req.files?.rawImage) {
+    if (rawBuffer) {
+      const compressedRawBuffer = await sharp(rawBuffer)
+        .resize({
+          width: 600, // Resize as needed for the artwork
+          height: 600,
+          fit: 'cover',
+          position: 'center',
+        })
+        .jpeg({ quality: 60 }) // Optional compression for raw image
+        .toBuffer(); // Get the resulting buffer
+
+      // Upload raw image to Cloudinary
       artUpload = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: 'card-gallery/artwork',
+            folder: 'card-gallery/artwork', // Store in 'artwork' folder
             resource_type: 'image',
-            format: 'png',
-            quality: "auto",
+            format: 'png', // Keep the image in PNG format
+            quality: 'auto', // Let Cloudinary optimize quality
           },
           (error, result) => error ? reject(error) : resolve(result)
         );
 
         const bufferStream = new stream.PassThrough();
-        bufferStream.end(req.files.rawImage[0].buffer);
+        bufferStream.end(compressedRawBuffer); // Pipe the buffer to upload stream
         bufferStream.pipe(uploadStream);
       });
     }
 
-    // Save to MongoDB
+    // Upload the compressed card image to Cloudinary
+    const cardUpload = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'card-gallery/cards', // Store in 'cards' folder
+          resource_type: 'image',
+          format: 'png',
+          quality: 'auto', // Let Cloudinary optimize quality
+        },
+        (error, result) => error ? reject(error) : resolve(result)
+      );
+
+      const bufferStream = new stream.PassThrough();
+      bufferStream.end(compressedCardBuffer); // Pipe the compressed card buffer
+      bufferStream.pipe(uploadStream);
+    });
+
+    // Save the card details to MongoDB
     const newCard = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -145,8 +150,10 @@ bufferStream.pipe(uploadStream);
       artFileName: artUpload?.public_id || null
     });
 
+    // Save the new card to MongoDB
     await newCard.save();
     
+    // Send the response back
     res.status(201).json({
       success: true,
       card: newCard,
@@ -166,6 +173,7 @@ bufferStream.pipe(uploadStream);
     });
   }
 });
+
 
 // Get all saved cards - No changes needed
 app.get('/api/cards', async (req, res) => {
