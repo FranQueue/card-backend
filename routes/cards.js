@@ -30,7 +30,8 @@ router.post('/upload', upload.fields([
       offsetX, offsetY, titleFontSize, titlePositionY,
       cardType, imageScale,
       cardUrl, cardFileName,
-      artUrl, artFileName
+      artUrl, artFileName,
+      imageUrl: cardUrl // Set imageUrl to cardUrl
     });
 
     await card.save();
@@ -84,6 +85,7 @@ router.put('/cards/:id', upload.fields([
       if (card.cardFileName) await cloudinary.uploader.destroy(card.cardFileName);
       card.cardUrl = cardFile.path;
       card.cardFileName = cardFile.filename;
+      card.imageUrl = cardFile.path; // Update imageUrl when cardFile is updated
     }
 
     Object.assign(card, {
