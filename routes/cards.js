@@ -25,6 +25,8 @@ router.post('/upload', upload.fields([
     const artUrl = rawFile?.path;
     const artFileName = rawFile?.filename;
 
+    const thumbnailUrl = cardUrl ? cardUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/') : null;
+
     const card = new Card({
       title, subtitle, description, hpCost, spCost,
       offsetX, offsetY, titleFontSize, titlePositionY,
@@ -32,7 +34,8 @@ router.post('/upload', upload.fields([
       cardUrl, cardFileName,
       artUrl, artFileName,
       imageUrl: cardUrl, // Set imageUrl to cardUrl
-      cardImage: cardUrl // Set cardImage to cardUrl for frontend compatibility
+      cardImage: cardUrl, // Set cardImage to cardUrl for frontend compatibility
+      thumbnailUrl // Set thumbnailUrl for gallery thumbnails
     });
 
     await card.save();
@@ -88,6 +91,7 @@ router.put('/cards/:id', upload.fields([
       card.cardFileName = cardFile.filename;
       card.imageUrl = cardFile.path; // Update imageUrl when cardFile is updated
       card.cardImage = cardFile.path; // Update cardImage for frontend compatibility
+      card.thumbnailUrl = cardFile.path.replace('/upload/', '/upload/w_200,h_320,c_fill/'); // Update thumbnailUrl
     }
 
     Object.assign(card, {
