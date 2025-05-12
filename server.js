@@ -28,11 +28,12 @@ const upload = multer({
 });
 
 const app = express();
-app.use(cors());
-app.use(express.json());
 app.get('/api/healthcheck', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
+app.use(cors());
+app.use(express.json());
+
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
