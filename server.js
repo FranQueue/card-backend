@@ -181,24 +181,23 @@ app.get('/api/cards', async (req, res) => {
     const cards = await Card.find(); // ✅ fetch cards first
 
     // In your backend's GET /api/cards endpoint
-const cardsWithThumbnails = cards.map(card => {
-  const imageUrl = card.imageUrl;
-  let thumbnailUrl = imageUrl;
-  
-  // Handle different Cloudinary URL formats
-  if (imageUrl.includes('res.cloudinary.com')) {
-    if (imageUrl.includes('/upload/')) {
-      thumbnailUrl = imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
-    } else {
-      // If the URL doesn't have /upload/, insert it before the transformation
-      const parts = imageUrl.split('/');
-      const uploadIndex = parts.findIndex(part => part === 'image');
-      if (uploadIndex > -1) {
-        parts.splice(uploadIndex + 1, 0, 'upload', 'w_200,h_320,c_fill');
-        thumbnailUrl = parts.join('/');
+    const cardsWithThumbnails = cards.map(card => {
+      const imageUrl = card.imageUrl || '';
+      let thumbnailUrl = imageUrl;
+    
+      if (imageUrl.includes('res.cloudinary.com')) {
+        if (imageUrl.includes('/upload/')) {
+          thumbnailUrl = imageUrl.replace('/upload/', '/upload/w_200,h_320,c_fill/');
+        } else {
+          const parts = imageUrl.split('/');
+          const uploadIndex = parts.findIndex(part => part === 'image');
+          if (uploadIndex > -1) {
+            parts.splice(uploadIndex + 1, 0, 'upload', 'w_200,h_320,c_fill');
+            thumbnailUrl = parts.join('/');
+          }
+        }
       }
-    }
-  }
+    
   
   return {
     ...card.toObject(),
