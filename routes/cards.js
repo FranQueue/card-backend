@@ -12,8 +12,9 @@ router.post('/upload', upload.fields([
   try {
     // 1. Upload FULL CARD IMAGE to Cloudinary
     const cardUpload = await cloudinary.uploader.upload(req.files.cardImage[0].path, {
-      folder: 'card-gallery/full-cards',
-      transformation: [{ width: 384, height: 617, crop: 'fill', background: 'auto' }]
+      folder: 'card-gallery/cards',
+      transformation: [{ width: 768, height: 1234, crop: 'fill', background: 'auto' }],
+      format: 'png'
     });
 
     // 2. Upload RAW ARTWORK (if exists)
