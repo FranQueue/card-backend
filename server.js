@@ -110,15 +110,15 @@ app.post('/api/upload', upload.fields([
     const rawBuffer = req.files?.rawImage?.[0]?.buffer || null;
 
     // Process card image (unchanged)
-    const compressedCardBuffer = await sharp(cardBuffer)
-      .resize({
-        width: 384,
-        height: 617, 
-        fit: 'cover',
-        position: 'center',
-      })
-      .jpeg({ quality: 60 })
-      .toBuffer();
+    const highResCardBuffer = await sharp(cardBuffer)
+  .resize({
+    width: 768,
+    height: 1234,
+    fit: 'contain',  // Changed from 'cover' to maintain aspect ratio
+    background: { r: 0, g: 0, b: 0, alpha: 0 } // Transparent background
+  })
+  .png({ quality: 90 }) // Changed from JPEG to PNG for transparency
+  .toBuffer();
 
     // Process artwork image with new improved method
     let artUpload = null;
@@ -185,13 +185,16 @@ app.post('/api/upload', upload.fields([
           folder: 'card-gallery/cards',
           resource_type: 'image',
           format: 'png',
-          quality: 'auto',
+          quality: 'auto:best', // Higher quality setting
+          transformation: [
+            { width: 768, height: 1234, crop: 'limit' } // Ensure dimensions
+          ]
         },
         (error, result) => error ? reject(error) : resolve(result)
       );
-
+    
       const bufferStream = new stream.PassThrough();
-      bufferStream.end(compressedCardBuffer);
+      bufferStream.end(highResCardBuffer); // Using our new high-res buffer
       bufferStream.pipe(uploadStream);
     });
 
@@ -221,8 +224,8 @@ app.post('/api/upload', upload.fields([
       success: true,
       card: newCard,
       imageDetails: {
-        width: 384,
-        height: 617,
+        width: 768,
+        height: 1234,
         format: 'png'
       }
     });
@@ -244,6 +247,7 @@ app.get('/api/cards', async (req, res) => {
     const cards = await Card.find().sort({ createdAt: -1 });
 
     const cardsWithThumbnails = cards.map(card => {
+      // Use the thumbnail URL if it exists, otherwise create one from the high-res image
       const thumbnailUrl = card.thumbnailUrl || 
         (card.cardUrl ? card.cardUrl.replace('/upload/', '/upload/w_384,h_617,c_fill/') : null);
       
@@ -349,22 +353,41 @@ app.put('/api/cards/:id', upload.fields([
       if (card.cardFileName) {
         await cloudinary.uploader.destroy(card.cardFileName);
       }
-
+    
+      // Process to high resolution
+      const highResCardBuffer = await sharp(req.files.cardImage[0].buffer)
+        .resize({
+          width: 768,
+          height: 1234,
+          fit: 'contain',
+          background: { r: 0, g: 0, b: 0, alpha: 0 } // Transparent background
+        })
+        .png({ quality: 90 })
+        .toBuffer();
+    
       const cardUpload = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
-          { resource_type: 'auto' },
+          {
+            folder: 'card-gallery/cards',
+            resource_type: 'image',
+            format: 'png',
+            quality: 'auto:best',
+            transformation: [
+              { width: 768, height: 1234, crop: 'limit' }
+            ]
+          },
           (error, result) => error ? reject(error) : resolve(result)
         );
-        
+    
         const bufferStream = new stream.PassThrough();
-        bufferStream.end(req.files.cardImage[0].buffer);
+        bufferStream.end(highResCardBuffer);
         bufferStream.pipe(uploadStream);
       });
-
+    
       updates.cardUrl = cardUpload.secure_url;
-  updates.cardFileName = cardUpload.public_id;
-  updates.thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_384,h_617,c_fill/');
-}
+      updates.cardFileName = cardUpload.public_id;
+      updates.thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_384,h_617,c_fill/');
+    }
 
     const updatedCard = await Card.findByIdAndUpdate(
       req.params.id,

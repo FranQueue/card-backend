@@ -24,6 +24,7 @@ const cardSchema = new mongoose.Schema({
   // System-generated
   thumbnailUrl: String, // Auto-generated thumbnail
   createdAt: { type: Date, default: Date.now }
+  
 });
 
 module.exports = mongoose.model('Card', cardSchema);
