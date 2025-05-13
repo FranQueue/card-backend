@@ -10,11 +10,10 @@ router.post('/upload', upload.fields([
   { name: 'rawImage', maxCount: 1 }
 ]), async (req, res) => {
   try {
-    // 1. Upload FULL CARD IMAGE to Cloudinary
+    // 1. Upload FULL CARD IMAGE to Cloudinary (no transformation!)
     const cardUpload = await cloudinary.uploader.upload(req.files.cardImage[0].path, {
       folder: 'card-gallery/cards',
-      transformation: [{ width: 768, height: 1234, crop: 'fill', background: 'auto' }],
-      format: 'png'
+      format: 'png' // enforce PNG format to preserve transparency
     });
 
     // 2. Upload RAW ARTWORK (if exists)
@@ -25,10 +24,13 @@ router.post('/upload', upload.fields([
       });
     }
 
-    // 3. Generate thumbnail URL
-    const thumbnailUrl = cardUpload.secure_url.replace('/upload/', '/upload/w_384,h_617,c_fill/');
+    // 3. Generate thumbnail URL (Cloudinary will generate it dynamically)
+    const thumbnailUrl = cardUpload.secure_url.replace(
+      '/upload/',
+      '/upload/w_384,h_617,c_fill/'
+    );
 
-    // 4. Save to database (USE cardUrl NOT imageUrl)
+    // 4. Save to database
     const card = new Card({
       title: req.body.title,
       subtitle: req.body.subtitle,
@@ -41,8 +43,8 @@ router.post('/upload', upload.fields([
       titlePositionY: req.body.titlePositionY,
       cardType: req.body.cardType,
       imageScale: req.body.imageScale,
-      cardUrl: cardUpload.secure_url,       // Changed from imageUrl
-      cardFileName: cardUpload.public_id,   // Changed from fileName
+      cardUrl: cardUpload.secure_url,
+      cardFileName: cardUpload.public_id,
       artUrl: artUpload?.secure_url || null,
       artFileName: artUpload?.public_id || null,
       thumbnailUrl
@@ -55,6 +57,7 @@ router.post('/upload', upload.fields([
     res.status(500).json({ error: 'Upload failed' });
   }
 });
+
 
 // GET all cards
 router.get('/cards', async (req, res) => {
