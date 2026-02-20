@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
 
 const cardSchema = new mongoose.Schema({
+  // Content batch / Cloudinary folder selector (used to separate test vs production sets)
+  // For older cards created before this field existed, the app treats missing values as "cards".
+  folder: { type: String, default: 'cards', index: true },
+
   title: String,
   subtitle: String,
   description: String,

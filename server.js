@@ -74,6 +74,144 @@ app.get('/api/healthcheck', (req, res) => {
 app.use(cors());
 app.use(express.json());
 
+const puppeteer = require("puppeteer");
+
+app.post("/api/render-card", async (req, res) => {
+  try {
+    const {
+      title,
+      subtitle,
+      description,
+      hpCost,
+      spCost,
+      cardType,
+      imageUrl,
+      offsetX,
+      offsetY,
+      imageScale,
+      titleFontSize,
+      titlePositionY
+    } = req.body;
+
+    const html = `
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    @font-face {
+      font-family: 'Dark Nouveau';
+      src: url('file://${__dirname}/public/fonts/DarkNouveau-Regular.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+    }
+    @font-face {
+      font-family: 'Inria Serif';
+      src: url('file://${__dirname}/public/fonts/InriaSerif-Regular.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    body { margin:0; background: transparent; }
+    #card {
+      position: relative;
+      width: 768px;   /* 384 * 2 */
+      height: 1234px; /* 617 * 2 */
+      overflow: hidden;
+      background: transparent;
+      background-image: url('file://${__dirname}/public/${cardType === "magic" ? "card-empty-magic.png" : "card-empty.png"}');
+      background-size: cover;
+    }
+    .art {
+      position:absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(${imageScale});
+      transform-origin: center;
+      pointer-events:none;
+    }
+    .title {
+      position:absolute;
+      width:80%;
+      left:10%;
+      bottom:${titlePositionY * 2}px;
+      text-align:center;
+      font-family: 'Dark Nouveau', regular;
+      font-size:${titleFontSize * 2}px;
+      font-weight:600;
+      color:black;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    /* etc (subtitle, description, costs) — same as your CardPreview but multiply px by 2 */
+  </style>
+</head>
+<body>
+  <div id="card">
+    ${imageUrl ? `<img class="art" src="${imageUrl}" style="left: calc(50% + ${offsetX*2}px); top: calc(50% + ${offsetY*2}px);" />` : ""}
+    <div class="title">${escapeHtml(title || "")}</div>
+  </div>
+</body>
+</html>`;
+
+    const browser = await puppeteer.launch({
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+    const page = await browser.newPage();
+    await page.setViewport({ width: 768, height: 1234, deviceScaleFactor: 1 });
+    await page.setContent(html, { waitUntil: "networkidle0" });
+
+    const cardEl = await page.$("#card");
+    const pngBuffer = await cardEl.screenshot({ type: "png", omitBackground: true });
+
+    await browser.close();
+
+    res.set("Content-Type", "image/png");
+    res.send(pngBuffer);
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+// --- Card batch / folder helpers ---
+// We accept a simple folder "key" (e.g. "cards", "cards_test", "expansion1")
+// and map it to Cloudinary folders under card-gallery/...
+function normalizeBatchFolder(input) {
+  const raw = (input ?? '').toString().trim();
+  if (!raw) return 'cards';
+  // Keep it boring & safe: alnum + _ + - only.
+  const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+  return cleaned || 'cards';
+}
+
+function getCloudinaryFolders(batchFolder) {
+  const batch = normalizeBatchFolder(batchFolder);
+  if (batch === 'cards') {
+    // Preserve existing structure for production cards
+    return {
+      batch,
+      cardFolder: 'card-gallery/cards',
+      artFolder: 'card-gallery/artwork'
+    };
+  }
+  return {
+    batch,
+    cardFolder: `card-gallery/${batch}/cards`,
+    artFolder: `card-gallery/${batch}/artwork`
+  };
+}
+
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
@@ -104,6 +242,11 @@ app.post('/api/upload', upload.fields([
     if (!req.files?.cardImage) {
       return res.status(400).json({ error: 'Card image is required' });
     }
+
+    // Batch / folder selection (defaults to "cards")
+    // Accept it from body (multipart field), query (debug/testing), or a header.
+    const folderKey = (req.body?.folder || req.query?.folder || req.headers['x-card-folder'] || '').toString();
+    const { batch, cardFolder, artFolder } = getCloudinaryFolders(folderKey);
 
     // Get the raw image buffer if it exists
     const cardBuffer = req.files.cardImage[0].buffer;
@@ -161,7 +304,7 @@ app.post('/api/upload', upload.fields([
       artUpload = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: 'card-gallery/artwork',
+            folder: artFolder,
             resource_type: 'image',
             format: 'png',
             quality: 'auto:best',
@@ -182,7 +325,7 @@ app.post('/api/upload', upload.fields([
     const cardUpload = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          folder: 'card-gallery/cards',
+          folder: cardFolder,
           resource_type: 'image',
           format: 'png',
           quality: 'auto:best', // Higher quality setting
@@ -200,6 +343,7 @@ app.post('/api/upload', upload.fields([
 
     // Create and save card document
     const newCard = new Card({
+      folder: batch,
       title: req.body.title,
       subtitle: req.body.subtitle,
       description: req.body.description,
@@ -244,7 +388,29 @@ app.post('/api/upload', upload.fields([
 // Get all saved cards - No changes needed
 app.get('/api/cards', async (req, res) => {
   try {
-    const cards = await Card.find().sort({ createdAt: -1 });
+    // Optional filtering by batch folder:
+    //   /api/cards?folder=cards_test
+    //   /api/cards?folder=cards     (includes legacy docs with missing folder)
+    //   /api/cards?folder=all       (explicitly return everything)
+    const folderQuery = req.query.folder;
+    let filter = {};
+    if (folderQuery && folderQuery !== 'all') {
+      const batch = normalizeBatchFolder(folderQuery);
+      if (batch === 'cards') {
+        filter = {
+          $or: [
+            { folder: 'cards' },
+            { folder: { $exists: false } },
+            { folder: null },
+            { folder: '' }
+          ]
+        };
+      } else {
+        filter = { folder: batch };
+      }
+    }
+
+    const cards = await Card.find(filter).sort({ createdAt: -1 });
 
     const cardsWithThumbnails = cards.map(card => {
       // Use the thumbnail URL if it exists, otherwise create one from the high-res image
@@ -253,6 +419,7 @@ app.get('/api/cards', async (req, res) => {
       
       return {
         ...card.toObject(),
+        folder: card.folder || 'cards',
         thumbnailUrl: thumbnailUrl || '/card-example.png'
       };
     });
@@ -285,7 +452,12 @@ app.put('/api/cards/:id', upload.fields([
     const card = await Card.findById(req.params.id);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
+    // Keep folder stable unless explicitly changed; defaults to "cards"
+    const folderKey = (req.body?.folder || req.query?.folder || req.headers['x-card-folder'] || card.folder || 'cards').toString();
+    const { batch, cardFolder, artFolder } = getCloudinaryFolders(folderKey);
+
     let updates = {
+      folder: batch,
       title: req.body.title,
       subtitle: req.body.subtitle,
       description: req.body.description,
@@ -304,6 +476,8 @@ app.put('/api/cards/:id', upload.fields([
   artFileName: card.artFileName || null,
   thumbnailUrl: card.thumbnailUrl || null
 };
+
+    let artUpload = null;
 
     // Handle raw image update if provided
     if (req.files?.rawImage?.[0]) {
@@ -325,7 +499,7 @@ app.put('/api/cards/:id', upload.fields([
   artUpload = await new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: 'card-gallery/artwork',
+        folder: artFolder,
         resource_type: 'image',
         format: 'png',
         quality: 'auto:best',
@@ -368,7 +542,7 @@ app.put('/api/cards/:id', upload.fields([
       const cardUpload = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: 'card-gallery/cards',
+            folder: cardFolder,
             resource_type: 'image',
             format: 'png',
             quality: 'auto:best',

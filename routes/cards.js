@@ -4,15 +4,41 @@ const Card = require('../models/Card'); // adjust path if needed
 
 const router = express.Router();
 
+// --- Card batch / folder helpers ---
+function normalizeBatchFolder(input) {
+  const raw = (input ?? '').toString().trim();
+  if (!raw) return 'cards';
+  const cleaned = raw.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
+  return cleaned || 'cards';
+}
+
+function getCloudinaryFolders(batchFolder) {
+  const batch = normalizeBatchFolder(batchFolder);
+  if (batch === 'cards') {
+    return {
+      batch,
+      cardFolder: 'card-gallery/cards',
+      artFolder: 'card-gallery/artwork'
+    };
+  }
+  return {
+    batch,
+    cardFolder: `card-gallery/${batch}/cards`,
+    artFolder: `card-gallery/${batch}/artwork`
+  };
+}
+
 // CREATE card
 router.post('/upload', upload.fields([
   { name: 'cardImage', maxCount: 1 },
   { name: 'rawImage', maxCount: 1 }
 ]), async (req, res) => {
   try {
+    const { batch, cardFolder, artFolder } = getCloudinaryFolders(req.body.folder);
+
     // 1. Upload FULL CARD IMAGE to Cloudinary (768x1234 PNG, no additional transform)
     const cardUpload = await cloudinary.uploader.upload(req.files.cardImage[0].path, {
-      folder: 'card-gallery/cards',
+      folder: cardFolder,
       format: 'png' // Ensures transparency preserved
     });
 
@@ -26,12 +52,13 @@ router.post('/upload', upload.fields([
     let artUpload = null;
     if (req.files.rawImage) {
       artUpload = await cloudinary.uploader.upload(req.files.rawImage[0].path, {
-        folder: 'card-gallery/artwork'
+        folder: artFolder
       });
     }
 
     // 4. Save everything to DB
     const card = new Card({
+      folder: batch,
       title: req.body.title,
       subtitle: req.body.subtitle,
       description: req.body.description,
@@ -63,7 +90,25 @@ router.post('/upload', upload.fields([
 // GET all cards
 router.get('/cards', async (req, res) => {
   try {
-    const cards = await Card.find().sort({ createdAt: -1 });
+    const folderQuery = req.query.folder;
+    let filter = {};
+    if (folderQuery && folderQuery !== 'all') {
+      const batch = normalizeBatchFolder(folderQuery);
+      if (batch === 'cards') {
+        filter = {
+          $or: [
+            { folder: 'cards' },
+            { folder: { $exists: false } },
+            { folder: null },
+            { folder: '' }
+          ]
+        };
+      } else {
+        filter = { folder: batch };
+      }
+    }
+
+    const cards = await Card.find(filter).sort({ createdAt: -1 });
 
     const cardsWithThumbnails = cards.map(card => {
       // Use cardUrl as the primary source for thumbnails
@@ -101,6 +146,12 @@ router.put('/cards/:id', upload.fields([
     const card = await Card.findById(req.params.id);
     if (!card) return res.status(404).json({ error: 'Card not found' });
 
+    const { batch, cardFolder, artFolder } = getCloudinaryFolders(
+      req.body.folder ?? card.folder ?? 'cards'
+    );
+
+    card.folder = batch;
+
     // Handle raw image update
     if (req.files?.rawImage?.[0]) {
       if (card.artFileName) {
@@ -108,7 +159,7 @@ router.put('/cards/:id', upload.fields([
       }
       
       const artUpload = await cloudinary.uploader.upload(req.files.rawImage[0].path, {
-        folder: 'card-gallery/artwork'
+        folder: artFolder
       });
       
       card.artUrl = artUpload.secure_url;
@@ -122,7 +173,7 @@ router.put('/cards/:id', upload.fields([
       }
       
       const cardUpload = await cloudinary.uploader.upload(req.files.cardImage[0].path, {
-        folder: 'card-gallery/full-cards',
+        folder: cardFolder,
         transformation: [{ width: 384, height: 617, crop: 'fill' }]
       });
 
